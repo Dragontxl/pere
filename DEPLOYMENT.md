@@ -73,7 +73,7 @@ pere/
 | `CALLBACK_SECRET` | 回调签名密钥（与视频生成一致） |
 | `JWT_SECRET` | JWT 签名密钥（至少 32 字节） |
 | `ENCRYPTION_KEY` | AES-GCM 加密密钥（至少 32 字节） |
-| `GITHUB_PAT` | GitHub Personal Access Token（repo, workflow scope） |
+| `GH_PAT` | GitHub Personal Access Token（repo, workflow scope；不能以 `GITHUB_` 开头） |
 | `FRONTEND_URL` | 前端地址（`https://pere.ygtxl.dpdns.org`） |
 | `R2_PUBLIC_URL` | R2 公开访问 URL |
 | `CLOUDFLARE_API_TOKEN` | Cloudflare API Token（用于缓存清除） |

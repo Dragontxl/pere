@@ -52,7 +52,7 @@ jobs:
           CALLBACK_SECRET: ${{ secrets.CALLBACK_SECRET }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
-          GITHUB_PAT: ${{ secrets.GITHUB_PAT }}
+          GITHUB_PAT: ${{ secrets.GH_PAT }}
           FRONTEND_URL: ${{ secrets.FRONTEND_URL }}
           R2_PUBLIC_URL: ${{ secrets.R2_PUBLIC_URL }}
         run: npx wrangler deploy
