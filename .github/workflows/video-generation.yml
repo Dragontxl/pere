@@ -1,0 +1,372 @@
+name: 视频生成
+
+on:
+  workflow_dispatch:
+    inputs:
+      task_id:
+        description: '任务ID'
+        required: true
+        type: string
+      article_content:
+        description: '文章内容（直接粘贴，与 file_key 二选一）'
+        required: false
+        type: string
+      article_file_key:
+        description: 'R2 中的文章文件 Key（与 content 二选一）'
+        required: false
+        type: string
+      topic:
+        description: '话题（填写则用 AI 生成文章，优先于 content/file_key）'
+        required: false
+        type: string
+      orientation:
+        description: '图片方向'
+        required: false
+        default: 'landscape'
+        type: choice
+        options:
+          - landscape
+          - portrait
+      language:
+        description: '文章语言'
+        required: false
+        default: 'zh'
+        type: choice
+        options:
+          - zh
+          - en
+      start_phase:
+        description: '起始阶段'
+        required: false
+        default: 'SCENE_GEN'
+        type: choice
+        options:
+          - SCENE_GEN
+          - ASSET_MATCH
+          - REMOTION_RENDER
+          - TTS_COMPOSE
+      end_phase:
+        description: '结束阶段'
+        required: false
+        default: 'TTS_COMPOSE'
+        type: choice
+        options:
+          - SCENE_GEN
+          - ASSET_MATCH
+          - REMOTION_RENDER
+          - TTS_COMPOSE
+
+  repository_dispatch:
+    types: [video-generation]
+
+permissions:
+  contents: read
+
+jobs:
+  generate-video:
+    runs-on: windows-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: 安装 Python 依赖
+        run: |
+          pip install -r requirements.txt
+
+      - name: 安装 Node.js 依赖
+        run: |
+          cd remotion && npm install
+
+      - name: 配置 ImageMagick
+        run: choco install imagemagick --no-wait
+
+      - name: 归一化任务参数
+        id: params
+        shell: pwsh
+        run: |
+          $event = $env:GITHUB_EVENT
+          if ($event -and $event.client_payload) {
+            $task_id = $event.client_payload.task_id
+            $article_source = $event.client_payload.article_source
+            $article_content = $event.client_payload.article_content
+            $article_file_key = $event.client_payload.article_file_key
+            $orientation = $event.client_payload.orientation
+            $language = $event.client_payload.language
+            $enable_subtitle = $event.client_payload.enable_subtitle
+            $start_phase = $event.client_payload.start_phase
+            $end_phase = $event.client_payload.end_phase
+          } else {
+            $task_id = "${{ inputs.task_id }}"
+            $article_source = "pasted"
+            $article_content = "${{ inputs.article_content }}"
+            $article_file_key = "${{ inputs.article_file_key }}"
+            $orientation = "${{ inputs.orientation }}"
+            $language = "${{ inputs.language }}"
+            $enable_subtitle = "true"
+            $start_phase = "${{ inputs.start_phase }}"
+            $end_phase = "${{ inputs.end_phase }}"
+          }
+
+          # 写入环境变量供后续步骤使用
+          Add-Content -Path $env:GITHUB_ENV -Value "TASK_ID=$task_id"
+          Add-Content -Path $env:GITHUB_ENV -Value "ARTICLE_SOURCE=$article_source"
+          Add-Content -Path $env:GITHUB_ENV -Value "ARTICLE_CONTENT=$article_content"
+          Add-Content -Path $env:GITHUB_ENV -Value "ARTICLE_FILE_KEY=$article_file_key"
+          Add-Content -Path $env:GITHUB_ENV -Value "ORIENTATION=$orientation"
+          Add-Content -Path $env:GITHUB_ENV -Value "LANGUAGE=$language"
+          Add-Content -Path $env:GITHUB_ENV -Value "ENABLE_SUBTITLE=$enable_subtitle"
+          Add-Content -Path $env:GITHUB_ENV -Value "START_PHASE=$start_phase"
+          Add-Content -Path $env:GITHUB_ENV -Value "END_PHASE=$end_phase"
+
+          $phase_order = @('SCENE_GEN', 'ASSET_MATCH', 'REMOTION_RENDER', 'TTS_COMPOSE')
+          $start_idx = [array]::IndexOf($phase_order, $start_phase)
+          $end_idx = [array]::IndexOf($phase_order, $end_phase)
+          if ($start_idx -lt 0) { $start_idx = 0 }
+          if ($end_idx -lt 0) { $end_idx = 3 }
+          if ($end_idx -lt $start_idx) { $end_idx = $start_idx }
+
+          Add-Content -Path $env:GITHUB_ENV -Value "START_PHASE_IDX=$start_idx"
+          Add-Content -Path $env:GITHUB_ENV -Value "END_PHASE_IDX=$end_idx"
+
+          Write-Host "Task: $task_id"
+          Write-Host "Phases: $start_phase ($start_idx) → $end_phase ($end_idx)"
+          Write-Host "Article source: $article_source"
+          Write-Host "Article file key: $article_file_key"
+
+      - name: 下载文章文件（R2）
+        if: ${{ env.ARTICLE_FILE_KEY != '' }}
+        shell: pwsh
+        run: |
+          # 使用 wrangler R2 客户端下载文章文件
+          npx wrangler r2 object get `
+            --bucket ${{ secrets.R2_BUCKET_NAME }} `
+            --key ${{ env.ARTICLE_FILE_KEY }} `
+            --destination article_download.txt 2>&1
+
+          if (Test-Path article_download.txt) {
+            Copy-Item article_download.txt article.txt -Force
+            Write-Host "Article file downloaded from R2: ${{ env.ARTICLE_FILE_KEY }}"
+          } else {
+            Write-Error "Failed to download article file from R2"
+          }
+
+      - name: 保存文章内容
+        if: ${{ env.ARTICLE_FILE_KEY == '' && env.ARTICLE_CONTENT != '' }}
+        shell: pwsh
+        run: |
+          # 将文章内容写入文件
+          [System.IO.File]::WriteAllText(
+            "$PWD\article.txt",
+            $env:ARTICLE_CONTENT,
+            [System.Text.Encoding]::UTF8
+          )
+          Write-Host "Article content saved to article.txt ($($env:ARTICLE_CONTENT.Length) chars)"
+
+      - name: 发送阶段开始回调
+        shell: pwsh
+        env:
+          CALLBACK_URL: ${{ secrets.CALLBACK_URL }}
+          CALLBACK_SECRET: ${{ secrets.CALLBACK_SECRET }}
+        run: |
+          Write-Host "Sending phase start callback for task $env:TASK_ID"
+          # Import the same HMAC signing logic used by the backend
+          $secret = $env:CALLBACK_SECRET
+          $payload = @{
+            task_id = $env:TASK_ID
+            phase = $env:START_PHASE
+            status = 'started'
+            message = "Phase $env:START_PHASE started"
+          } | ConvertTo-Json -Compress
+
+          $hmac = New-Object System.Security.Cryptography.HMACSHA256
+          $hmac.Key = [System.Text.Encoding]::UTF8.GetBytes($secret)
+          $hash = [System.Convert]::ToBase64String($hmac.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($payload)))
+
+          $headers = @{
+            "Content-Type" = "application/json"
+            "X-Callback-Signature" = $hash
+          }
+
+          try {
+            $resp = Invoke-RestMethod -Uri $env:CALLBACK_URL -Method Post -Headers $headers -Body $payload
+            Write-Host "Callback response: $($resp | ConvertTo-Json -Compress)"
+          } catch {
+            Write-Host "Callback send failed (will continue): $($_.Exception.Message)"
+          }
+
+      - name: 执行视频生成
+        id: generate
+        env:
+          ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
+          AGNES_API_KEY: ${{ secrets.AGNES_API_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          CALLBACK_URL: ${{ secrets.CALLBACK_URL }}
+          CALLBACK_SECRET: ${{ secrets.CALLBACK_SECRET }}
+        shell: pwsh
+        run: |
+          # 构建命令行参数
+          $cmd = @(
+            "python", "main.py",
+            "--task-id", $env:TASK_ID,
+            "--article-source", $env:ARTICLE_SOURCE,
+            "--start-phase", $env:START_PHASE,
+            "--end-phase", $env:END_PHASE,
+            "--orientation", $env:ORIENTATION,
+            "--language", $env:LANGUAGE,
+            "--output-dir", "./output",
+            "--callback-url", $env:CALLBACK_URL,
+            "--callback-secret", $env:CALLBACK_SECRET,
+            "--r2-prefix", "tasks/$env:TASK_ID",
+            "--r2-bucket", ${{ secrets.R2_BUCKET_NAME }},
+            "--r2-access-key-id", ${{ secrets.R2_ACCESS_KEY_ID }},
+            "--r2-secret-access-key", ${{ secrets.R2_SECRET_ACCESS_KEY }},
+            "--r2-endpoint", ${{ secrets.R2_ENDPOINT_URL }}
+          )
+
+          if ($env:ARTICLE_FILE_KEY -ne "") {
+            $cmd += @("--article-file", "article.txt")
+          } elseif ($env:ARTICLE_CONTENT -ne "") {
+            $cmd += @("--article-file", "article.txt")
+          }
+
+          if ($env:ENABLE_SUBTITLE -eq "false") {
+            $cmd += @("--no-subtitle")
+          }
+
+          $cmdLine = $cmd -join " "
+          Write-Host "Running: $cmdLine"
+
+          # 执行并捕获退出码
+          & $cmd
+          $exitCode = $LASTEXITCODE
+
+          if ($exitCode -ne 0) {
+            Write-Error "Video generation failed with exit code $exitCode"
+            exit $exitCode
+          }
+
+      - name: 上传中间产物到 R2
+        if: ${{ always() && steps.generate.outcome == 'success' }}
+        shell: pwsh
+        env:
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
+        run: |
+          # 上传 scenes.json、match_results.json、decisions.json、final_output.mp4 到 R2
+          $prefix = "tasks/$env:TASK_ID"
+
+          # 使用 wrangler r2 上传文件
+          $filesToUpload = @(
+            "output/scenes.json",
+            "output/match_results.json",
+            "output/decisions.json",
+            "output/final_output.mp4"
+          )
+
+          foreach ($file in $filesToUpload) {
+            if (Test-Path $file) {
+              $r2Key = "$prefix/$([System.IO.Path]::GetFileName($file))"
+              Write-Host "Uploading $file → $r2Key"
+
+              npx wrangler r2 object put `
+                --bucket $env:R2_BUCKET_NAME `
+                --key $r2Key `
+                --file $file 2>&1
+
+              if ($LASTEXITCODE -ne 0) {
+                Write-Warning "Failed to upload $file to R2 (continuing)"
+              }
+            } else {
+              Write-Warning "$file not found, skipping upload"
+            }
+          }
+
+      - name: 发送进度回调
+        if: ${{ always() }}
+        shell: pwsh
+        env:
+          CALLBACK_URL: ${{ secrets.CALLBACK_URL }}
+          CALLBACK_SECRET: ${{ secrets.CALLBACK_SECRET }}
+        run: |
+          $secret = $env:CALLBACK_SECRET
+          $phase = $env:END_PHASE
+          $status = if ($env:GITHUB_RUN_RESULT -eq 'success') { 'completed' } else { 'failed' }
+          $message = "Phase $phase $status"
+
+          $payload = @{
+            task_id = $env:TASK_ID
+            phase = $phase
+            status = $status
+            message = $message
+            processed_count = 1
+            total_count = 1
+          } | ConvertTo-Json -Compress
+
+          $hmac = New-Object System.Security.Cryptography.HMACSHA256
+          $hmac.Key = [System.Text.Encoding]::UTF8.GetBytes($secret)
+          $hash = [System.Convert]::ToBase64String($hmac.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($payload)))
+
+          $headers = @{
+            "Content-Type" = "application/json"
+            "X-Callback-Signature" = $hash
+          }
+
+          try {
+            $resp = Invoke-RestMethod -Uri $env:CALLBACK_URL -Method Post -Headers $headers -Body $payload
+            Write-Host "Progress callback response: $($resp | ConvertTo-Json -Compress)"
+          } catch {
+            Write-Host "Progress callback failed (will continue): $($_.Exception.Message)"
+          }
+
+      - name: 发送错误回调
+        if: ${{ failure() }}
+        shell: pwsh
+        env:
+          CALLBACK_URL: ${{ secrets.CALLBACK_URL }}
+          CALLBACK_SECRET: ${{ secrets.CALLBACK_SECRET }}
+        run: |
+          $secret = $env:CALLBACK_SECRET
+          $payload = @{
+            task_id = $env:TASK_ID
+            phase = $env:START_PHASE
+            status = 'failed'
+            error = "GitHub Actions workflow failed"
+          } | ConvertTo-Json -Compress
+
+          $hmac = New-Object System.Security.Cryptography.HMACSHA256
+          $hmac.Key = [System.Text.Encoding]::UTF8.GetBytes($secret)
+          $hash = [System.Convert]::ToBase64String($hmac.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($payload)))
+
+          $headers = @{
+            "Content-Type" = "application/json"
+            "X-Callback-Signature" = $hash
+          }
+
+          try {
+            $resp = Invoke-RestMethod -Uri $env:CALLBACK_URL -Method Post -Headers $headers -Body $payload
+            Write-Host "Error callback response: $($resp | ConvertTo-Json -Compress)"
+          } catch {
+            Write-Host "Error callback failed: $($_.Exception.Message)"
+          }
+
+      - name: 上传视频产物
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-video-${{ env.TASK_ID }}
+          path: output/**/*.mp4
+          retention-days: 7
