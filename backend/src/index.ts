@@ -54,8 +54,20 @@ app.route('/api/v1/files', publicFileRoutes);
 app.use('/api/v1/admin/*', authMiddleware);
 app.route('/api/v1/admin', adminRoutes);
 
-// 404 handler
+// 404 handler — serve static assets for non-API paths (SPA fallback)
 app.notFound((c) => {
+  const url = new URL(c.req.url);
+
+  // API paths return JSON 404
+  if (url.pathname.startsWith('/api/') || url.pathname === '/health') {
+    return c.json({ code: 404, msg: 'Not Found' }, 404);
+  }
+
+  // Non-API paths: delegate to assets binding (serves files or SPA index.html)
+  if (c.env.ASSETS) {
+    return c.env.ASSETS.fetch(c.req.raw);
+  }
+
   return c.json({ code: 404, msg: 'Not Found' }, 404);
 });
 

@@ -64,8 +64,8 @@ export default function CreateTask() {
       const data = await taskApi.create({
         title: title || '未命名任务',
         article_source: articleSource,
-        article_content: mode === 'paste' ? article : null,
-        article_file_key: mode === 'upload' ? fileKey : null,
+        article_content: mode === 'paste' ? article : undefined,
+        article_file_key: mode === 'upload' ? fileKey : undefined,
         orientation,
         language,
         enable_subtitle: enableSubtitle,

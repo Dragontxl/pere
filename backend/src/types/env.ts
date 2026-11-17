@@ -1,6 +1,7 @@
 export interface Bindings {
   DB: D1Database;
   R2: R2Bucket;
+  ASSETS: Fetcher;
   ADMIN_API_KEY: string;
   CALLBACK_SECRET: string;
   ENCRYPTION_KEY: string;

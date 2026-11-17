@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { taskApi, fileApi } from '../api/client';
-import type { Task, TaskLog } from '../types';
+import type { Task, TaskLog, TaskPhase } from '../types';
 import { statusLabels, phaseLabels, phaseOrder } from '../types';
 import ProgressBar from '../components/ProgressBar';
 
@@ -166,7 +166,7 @@ export default function TaskDetail() {
                 const isCurrent = task.current_phase === phase;
                 const phaseDone =
                   task.status === 'COMPLETED' ||
-                  (phaseOrder.indexOf(task.current_phase || '') > phaseOrder.indexOf(phase));
+                  (task.current_phase && phaseOrder.indexOf(task.current_phase as TaskPhase) > phaseOrder.indexOf(phase));
 
                 return (
                   <div

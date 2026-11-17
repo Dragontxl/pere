@@ -33,18 +33,19 @@ pere/
 │   └── package.json
 └── .github/workflows/          # GitHub Actions
     ├── video-generation.yml    # 视频生成（repository_dispatch）
-    ├── deploy-backend.yml      # 后端部署
-    └── deploy-frontend.yml     # 前端部署
+    ├── deploy-backend.yml      # 后端部署（含前端构建）
+    └── deploy-frontend.yml     # 前端构建验证
 ```
 
 ## 二、Cloudflare 资源
 
 | 资源 | 名称 | 说明 |
 |---|---|---|
-| Worker | `pexel-remotion-worker` | 后端 API，绑定自定义域名 `pere.ygtxl.dpdns.org` |
+| Worker | `pexel-remotion-worker` | 后端 API + 前端静态资源，绑定自定义域名 `pere.ygtxl.dpdns.org` |
 | D1 | `pexel-remotion-db` | SQLite 数据库 |
 | R2 | `pexel-remotion-bucket` | 产物存储（视频、分镜、匹配结果等） |
-| Pages | `pexel-remotion-frontend` | 前端静态站点，绑定 `pere.ygtxl.dpdns.org` |
+
+> **架构说明**：前端通过 Worker 的 `assets` 绑定提供静态文件，SPA 路由由 `not_found_handling = "single-page-application"` 处理。API 路径 `/api/*` 由 Worker 的 Hono 路由处理，非 API 路径由 assets 绑定提供静态文件。无需单独的 Pages 项目。
 
 ## 三、GitHub Actions Secrets
 
@@ -79,10 +80,7 @@ pere/
 
 ### 前端部署（deploy-frontend.yml）
 
-| Secret | 说明 |
-|---|---|
-| `CLOUDFLARE_API_TOKEN` | Cloudflare API Token |
-| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare 账户 ID |
+此 workflow 仅用于前端构建验证和产物上传，实际部署由 `deploy-backend.yml` 在构建前端后随 Worker 一起部署。
 
 ## 四、环境变量生成
 
@@ -121,35 +119,28 @@ npx wrangler d1 execute pexel-remotion-db --file=./src/database/schema.sql --rem
 npx wrangler r2 bucket create pexel-remotion-bucket
 ```
 
-### 3. 部署后端
+### 3. 部署后端（含前端）
 
-修改 `backend/wrangler.toml` 中的 `database_id` 后，推送 `backend/` 目录的变更到 `main` 分支，`deploy-backend.yml` 会自动部署。
+修改 `backend/wrangler.toml` 中的 `database_id` 后，推送 `backend/` 或 `frontend/` 目录的变更到 `main` 分支，`deploy-backend.yml` 会自动构建前端并部署 Worker。
 
 或手动部署：
 
 ```bash
-cd backend
+# 先构建前端
+cd frontend
+npm install
+npm run build
+
+# 再部署后端（Worker 会自动打包前端 assets）
+cd ../backend
 npx wrangler deploy
 ```
 
-### 4. 部署前端
+### 4. 配置自定义域名
 
-推送 `frontend/` 目录的变更到 `main` 分支，`deploy-frontend.yml` 会自动构建并部署到 Cloudflare Pages。
+在 Cloudflare Dashboard → Workers & Pages → `pexel-remotion-worker` → Settings → Triggers → Custom Domains 中添加 `pere.ygtxl.dpdns.org`。
 
-或手动部署：
-
-```bash
-cd frontend
-npm run build
-# 通过 Cloudflare Pages 部署 dist 目录
-```
-
-### 5. 配置自定义域名
-
-- Worker：在 Cloudflare Dashboard → Workers & Pages → `pexel-remotion-worker` → Settings → Triggers → Custom Domains 中添加 `pere.ygtxl.dpdns.org`
-- Pages：在 Cloudflare Dashboard → Workers & Pages → `pexel-remotion-frontend` → Settings → Custom Domains 中添加 `pere.ygtxl.dpdns.org`
-
-> **注意**：Worker 和 Pages 共用同一域名时，需要配置 Worker 路由，将 `/api/*` 路径路由到 Worker，其余路径由 Pages 处理。
+> **注意**：Worker 通过 `wrangler.toml` 中的 `[[routes]]` 配置已自动绑定自定义域名，所有请求（API + 前端）均由 Worker 统一处理。
 
 ## 六、默认账号
 

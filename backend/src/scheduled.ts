@@ -5,9 +5,9 @@ import { TaskService } from './services/TaskService';
  * Scheduled tasks for the pexel-remotion platform
  *
  * Cron schedules:
- * - */5 * * * * : Scan PENDING tasks and auto-start
- * - */30 * * * * : Clean up expired tasks and R2 files
- * - 0 0 * * * : Daily statistics reset
+ * - Every 5 min : Scan PENDING tasks and auto-start
+ * - Every 30 min : Clean up expired tasks and R2 files
+ * - Daily at 00:00 : Daily statistics reset
  */
 export async function scheduled(event: ScheduledEvent, env: Bindings): Promise<void> {
   const service = new TaskService(env);

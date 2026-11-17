@@ -30,8 +30,17 @@ database_id = "f4705826-ced3-4e40-97fd-2494e68cef79"
 binding = "R2"
 bucket_name = "pexel-remotion-bucket"
 
+[env.production.assets]
+directory = "../frontend/dist"
+not_found_handling = "single-page-application"
+
 [env.production.triggers]
-crons = ["*/5 * * * *", "*/30 * * * *", "0 0 * * *"]
+# crons removed - Workers Free tier limit reached (5 per account)
+
+[env.production.routes]
+pattern = "pere.ygtxl.dpdns.org"
+zone_name = "ygtxl.dpdns.org"
+custom_domain = true
 
 [vars]
 ADMIN_API_KEY = "${ADMIN_API_KEY}"
@@ -56,10 +65,14 @@ database_id = "f4705826-ced3-4e40-97fd-2494e68cef79"
 binding = "R2"
 bucket_name = "pexel-remotion-bucket"
 
+[assets]
+directory = "../frontend/dist"
+not_found_handling = "single-page-application"
+
 [[routes]]
 pattern = "pere.ygtxl.dpdns.org"
 zone_name = "ygtxl.dpdns.org"
 custom_domain = true
 
-[triggers]
-crons = ["*/5 * * * *", "*/30 * * * *", "0 0 * * *"]
+# [triggers] - Removed: Workers Free tier limit of 5 cron triggers per account reached
+# Scheduled tasks (auto-start PENDING, cleanup) can be re-enabled after upgrading to Workers Paid

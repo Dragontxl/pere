@@ -1,4 +1,4 @@
-name: 部署前端
+name: 前端构建
 
 on:
   push:
@@ -6,21 +6,18 @@ on:
     paths:
       - 'frontend/**'
       - '.github/workflows/deploy-frontend.yml'
+  pull_request:
+    paths:
+      - 'frontend/**'
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: true
 
 jobs:
-  build-and-deploy:
+  build-frontend:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
 
     steps:
       - name: 检出代码
@@ -41,16 +38,9 @@ jobs:
         working-directory: frontend
         run: npm run build
 
-      - name: 上传 Pages 产物
-        uses: actions/upload-pages-artifact@v3
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
         with:
+          name: frontend-dist
           path: frontend/dist
-
-      - name: 部署到 Cloudflare Pages
-        uses: cloudflare/pages-deploy-action@v4
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: pexel-remotion-frontend
-          branch: main
-          workspace: frontend
+          retention-days: 7
