@@ -96,17 +96,26 @@ jobs:
         id: params
         shell: pwsh
         run: |
-          $event = $env:GITHUB_EVENT
-          if ($event -and $event.client_payload) {
-            $task_id = $event.client_payload.task_id
-            $article_source = $event.client_payload.article_source
-            $article_content = $event.client_payload.article_content
-            $article_file_key = $event.client_payload.article_file_key
-            $orientation = $event.client_payload.orientation
-            $language = $event.client_payload.language
-            $enable_subtitle = $event.client_payload.enable_subtitle
-            $start_phase = $event.client_payload.start_phase
-            $end_phase = $event.client_payload.end_phase
+          # `GITHUB_EVENT` is not a real GitHub Actions variable - the event payload
+          # is only available as a JSON file behind GITHUB_EVENT_PATH.
+          $payload = $null
+          if ($env:GITHUB_EVENT_PATH -and (Test-Path $env:GITHUB_EVENT_PATH)) {
+            $event = Get-Content -Path $env:GITHUB_EVENT_PATH -Raw -Encoding UTF8 | ConvertFrom-Json
+            if ($event.PSObject.Properties.Name -contains 'client_payload' -and $event.client_payload) {
+              $payload = $event.client_payload
+            }
+          }
+
+          if ($payload) {
+            $task_id = $payload.task_id
+            $article_source = $payload.article_source
+            $article_content = $payload.article_content
+            $article_file_key = $payload.article_file_key
+            $orientation = $payload.orientation
+            $language = $payload.language
+            $enable_subtitle = $payload.enable_subtitle
+            $start_phase = $payload.start_phase
+            $end_phase = $payload.end_phase
           } else {
             $task_id = "${{ inputs.task_id }}"
             $article_source = "pasted"
@@ -119,10 +128,23 @@ jobs:
             $end_phase = "${{ inputs.end_phase }}"
           }
 
-          # 写入环境变量供后续步骤使用
+          # 缺省值兜底
+          if (-not $article_source) { $article_source = "pasted" }
+          if (-not $orientation) { $orientation = "landscape" }
+          if (-not $language) { $language = "zh" }
+          if (-not $start_phase) { $start_phase = "SCENE_GEN" }
+          if (-not $end_phase) { $end_phase = "TTS_COMPOSE" }
+          if ("$enable_subtitle" -match '^(?i)false$') { $enable_subtitle = "false" } else { $enable_subtitle = "true" }
+          $article_content = [string]$article_content
+          $article_file_key = [string]$article_file_key
+
+          # 写入环境变量供后续步骤使用（文章正文可能是多行，必须用分隔符语法）
           Add-Content -Path $env:GITHUB_ENV -Value "TASK_ID=$task_id"
           Add-Content -Path $env:GITHUB_ENV -Value "ARTICLE_SOURCE=$article_source"
-          Add-Content -Path $env:GITHUB_ENV -Value "ARTICLE_CONTENT=$article_content"
+          $delimiter = "ARTICLE_EOF_$([guid]::NewGuid().ToString('N'))"
+          Add-Content -Path $env:GITHUB_ENV -Value "ARTICLE_CONTENT<<$delimiter"
+          Add-Content -Path $env:GITHUB_ENV -Value $article_content
+          Add-Content -Path $env:GITHUB_ENV -Value $delimiter
           Add-Content -Path $env:GITHUB_ENV -Value "ARTICLE_FILE_KEY=$article_file_key"
           Add-Content -Path $env:GITHUB_ENV -Value "ORIENTATION=$orientation"
           Add-Content -Path $env:GITHUB_ENV -Value "LANGUAGE=$language"
