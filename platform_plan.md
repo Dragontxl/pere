@@ -838,3 +838,22 @@ pexel-remotion/                          # 本地目录（GitHub 仓库名：per
 6. **用户配额**：限制每用户每日任务数，防止滥用
 7. **封面自动生成**：从最终视频提取首帧作为任务封面
 8. **BGM 支持**：用户可选择背景音乐，workflow 中混合
+
+---
+
+## 十、部署排障记录（2026-11-17）
+
+联调过程中踩到的问题与结论，后续改配置时对照检查：
+
+| 问题 | 现象 | 结论 |
+|---|---|---|
+| `wrangler.toml` 里的 `${VAR}` | Worker 绑定值就是字面量 `${GITHUB_PAT}`，dispatch / JWT 全部失效 | wrangler 不做插值，密钥必须用 `wrangler secret put` 上传 |
+| 前端点击任务卡片跳登录页 | `window.location.href` 整页刷新，`AuthContext` 在 `useEffect` 里恢复 token，首帧被判未登录 | token 改为 `useState` 惰性同步初始化，跳转改用 `useNavigate()` |
+| 任务 ID 含中文 | `id` 取标题前 8 字符，中文任务无法用 URL 访问 | 改为 ASCII slug（非 ASCII 标题回退为 `task`）+ `crypto.randomUUID()` 片段 |
+| workflow 参数全为空 | 用了不存在的 `$env:GITHUB_EVENT` | 改为读取 `$env:GITHUB_EVENT_PATH` 指向的 JSON |
+| `& $cmd` 报「不是 cmdlet」 | PowerShell 把整个数组当成命令名 | `& $exe @cmdArgs` 展开传参 |
+| R2 secrets 写进 PowerShell 数组 | 未加引号导致 ParserError | 通过 step `env` 传参，脚本里用 `$env:XXX` |
+| deploy-backend 一直失败 | D1 迁移步骤没有 `CLOUDFLARE_API_TOKEN`；wrangler 4 要求 Node ≥ 22.12 | 迁移步骤补 token，三个 workflow 的 Node 统一为 22 |
+| `npm install` peer 冲突 | wrangler 4 peer 要求 `@cloudflare/workers-types@^5` | devDependency 升到 `^5.20261117.1` |
+
+当前状态：Worker / D1 / R2 / GitHub Actions 均已打通，创建任务即可自动触发 `video-generation` workflow。

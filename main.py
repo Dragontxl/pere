@@ -1629,7 +1629,10 @@ def main():
     model = config.get("model_name", "agnes-3.0-flash")
 
     # 初始化 Agnes 客户端（文本生成：文章、分镜）
+    # settings.json 优先，环境变量兜底（GitHub Actions 用）
     agnes_api_key = config.get("agnes_api_key", "")
+    if not agnes_api_key:
+        agnes_api_key = os.environ.get("AGNES_API_KEY", "")
     agnes_base_url = config.get("agnes_api_base_url", "https://apihub.agnes-ai.com/v1")
     if not agnes_api_key:
         print("❌ 未配置 Agnes API Key，请在 config/settings.json 中设置 agnes_api_key")
