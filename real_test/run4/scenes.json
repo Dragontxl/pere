@@ -1,0 +1,256 @@
+{
+  "scenes": [
+    {
+      "scene_id": 1,
+      "visual_description": "画面左侧是中国地图轮廓，右侧是K线走势图，两者通过光束连接，象征宏观与微观的对应",
+      "search_keywords": [
+        "china map",
+        "stock chart",
+        "connection",
+        "abstract"
+      ],
+      "on_screen_text": "GDP告诉你中国有多大，A股告诉你中国正在变成什么",
+      "duration": 0.0,
+      "visual_type": "concept",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 2,
+      "visual_description": "国新办发布会现场，大屏幕显示巨大的数字‘107.1万亿’和‘4.6%’",
+      "search_keywords": [
+        "press conference",
+        "screen data",
+        "government official",
+        "blue background"
+      ],
+      "on_screen_text": "根据国新办发布会，国家统计局公布前三季度经济数据：GDP 107.1万亿元，同比增长4.6%。",
+      "duration": 0.0,
+      "visual_type": "event",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 3,
+      "visual_description": "一条平缓向下的折线图，标注着5.0%、4.3%、4.5%，背景冷色调",
+      "search_keywords": [
+        "line graph",
+        "slight decline",
+        "data visualization",
+        "cold tone"
+      ],
+      "on_screen_text": "分季度看，一季度5.0%，二季度4.3%，三季度4.5%。一条平缓得几乎看不出情绪的下行曲线。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 4,
+      "visual_description": "分屏画面：左边是记者举手提问的场景，右边是微信群聊界面滚动着数字",
+      "search_keywords": [
+        "journalist question",
+        "chat app interface",
+        "split screen",
+        "busy"
+      ],
+      "on_screen_text": "发布会现场的提问很集中：全年目标能不能完成，政策还有多少空间。而投资群里在传另一组数字。",
+      "duration": 0.0,
+      "visual_type": "event",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 5,
+      "visual_description": "A股交易大厅屏幕滚动，突出显示‘5572家’、‘56.7万亿’、‘8.3%’等关键数字",
+      "search_keywords": [
+        "stock exchange screen",
+        "financial data",
+        "trading floor",
+        "bright lights"
+      ],
+      "on_screen_text": "A股三季报收官：5572家公司，营收56.7万亿元，净利润5.1万亿元，同比增长8.3%。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 6,
+      "visual_description": "特写镜头聚焦于光纤模块产品，背景叠加增长曲线急剧上升的动画",
+      "search_keywords": [
+        "optical module",
+        "fiber optics",
+        "growth curve",
+        "technology"
+      ],
+      "on_screen_text": "其中一家做光模块的公司，前三季度净利222.4亿元，同比增长211.81%——三年前，",
+      "duration": 0.0,
+      "visual_type": "concept",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 7,
+      "visual_description": "一个小的柱子图代表过去的低利润，旁边是一个巨大的柱子代表现在的222亿，对比强烈",
+      "search_keywords": [
+        "bar chart comparison",
+        "huge difference",
+        "profit growth",
+        "infographic"
+      ],
+      "on_screen_text": "它全年的利润还不到这个数字的十分之一。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 8,
+      "visual_description": "屏幕中央并排显示两个巨大数字：4.6% 和 211.81%，中间有闪电符号连接",
+      "search_keywords": [
+        "big numbers",
+        "contrast",
+        "lightning bolt",
+        "text animation"
+      ],
+      "on_screen_text": "4.6%和211.81%，同一天，同一个国家。",
+      "duration": 0.0,
+      "visual_type": "text_animation",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 9,
+      "visual_description": "静止的湖面，水面平静无波，色调灰暗，象征看似停滞的经济",
+      "search_keywords": [
+        "calm lake",
+        "still water",
+        "grey tone",
+        "stagnation"
+      ],
+      "on_screen_text": "如果你只看前者，你会觉得这是一个增长放缓、波澜不惊的经济体。",
+      "duration": 0.0,
+      "visual_type": "landscape",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 10,
+      "visual_description": "水下视角，水面静止，但水下有激烈的水流和发光的粒子在快速流动",
+      "search_keywords": [
+        "underwater flow",
+        "hidden energy",
+        "subsurface current",
+        "dynamic"
+      ],
+      "on_screen_text": "如果你看后者，你会意识到：在总量几乎静止的水面之下，一场产业权力的交接已经完成——只是它发生在报表里，",
+      "duration": 0.0,
+      "visual_type": "concept",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 11,
+      "visual_description": "黑色的背景上，白色文字‘不在新闻里’逐渐消散，只留下‘在报表里’的微弱光点",
+      "search_keywords": [
+        "black background",
+        "fading text",
+        "minimalist",
+        "spotlight"
+      ],
+      "on_screen_text": "不在新闻里。",
+      "duration": 0.0,
+      "visual_type": "text_animation",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 12,
+      "visual_description": "左侧是一个传统的雨伞图标（晴雨表），右侧是一个现代CT扫描仪的抽象线条图",
+      "search_keywords": [
+        "umbrella icon",
+        "ct scanner",
+        "medical technology",
+        "contrast"
+      ],
+      "on_screen_text": "这就是为什么，\"股市是经济的晴雨表\"这句话，在2026年已经太粗糙了。晴雨表只能告诉你下不下雨。",
+      "duration": 0.0,
+      "visual_type": "diagram",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 13,
+      "visual_description": "而今天的A股，更像一台CT机。一、用\"CT机\"取代\"晴雨表\"先说一个让人不舒服的事实。",
+      "search_keywords": [
+        "ct scan interface",
+        "medical imaging",
+        "technology blue",
+        "close up"
+      ],
+      "on_screen_text": "而今天的A股，更像一台CT机。一、用\"CT机\"取代\"晴雨表\"先说一个让人不舒服的事实。",
+      "duration": 0.0,
+      "visual_type": "concept",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 14,
+      "visual_description": "柱状图对比：GDP增速柱较矮，净利润增速柱较矮，但标注‘两倍’关系",
+      "search_keywords": [
+        "bar chart",
+        "comparison",
+        "doubling",
+        "economic growth"
+      ],
+      "on_screen_text": "前三季度，A股上市公司净利润同比增长8.5%，接近GDP增速的两倍。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 15,
+      "visual_description": "上证指数K线图，从4100点开始一路向下，跌破多个整数关口，红色下跌趋势",
+      "search_keywords": [
+        "stock chart downtrend",
+        "breaking support",
+        "red candles",
+        "falling"
+      ],
+      "on_screen_text": "同期，上证指数从7月的4100点上方一路下行，连破4100、4000、3900、3800、3700、",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 16,
+      "visual_description": "股票交易软件界面，K线图上标出3600整数关口，收盘价定格在3634点",
+      "search_keywords": [
+        "stock chart",
+        "price line",
+        "financial dashboard",
+        "3600 level"
+      ],
+      "on_screen_text": "3600六道整数关口，11月13日收在3634点。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 17,
+      "visual_description": "红色下跌曲线展示创业板指和科创50回撤超40%，背景叠加企业利润增长向上的箭头",
+      "search_keywords": [
+        "stock market decline",
+        "growth vs profit",
+        "financial charts",
+        "sharp drop"
+      ],
+      "on_screen_text": "创业板指、科创50指数自高点回撤一度超过40%，部分热门赛道个股腰斩。利润在涨，指数在跌。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 18,
+      "visual_description": "灰暗阴沉的天空下出现一座巨大的破旧的“晴雨表”模型，周围有问号符号漂浮",
+      "search_keywords": [
+        "stormy sky",
+        "weather vane",
+        "confusion",
+        "abstract concept"
+      ],
+      "on_screen_text": "如果股市真是晴雨表，这个天气就没法解释了。",
+      "duration": 0.0,
+      "visual_type": "concept",
+      "needs_effect": false
+    }
+  ]
+}

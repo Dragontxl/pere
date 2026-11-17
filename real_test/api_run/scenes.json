@@ -1,0 +1,1602 @@
+{
+  "scenes": [
+    {
+      "scene_id": 1,
+      "visual_description": "画面左侧展示中国地图与GDP增长曲线，右侧叠加A股K线图，象征经济规模与市场变化",
+      "search_keywords": [
+        "china map",
+        "stock chart",
+        "gdp growth"
+      ],
+      "on_screen_text": "GDP告诉你中国有多大，A股告诉你中国正在变成什么引子：一年之内，A股换了两个榜首",
+      "duration": 0.0,
+      "visual_type": "concept",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 2,
+      "visual_description": "新闻报纸头条特写，显示日期4月17日，标题提及陕西公司股价超越贵州茅台",
+      "search_keywords": [
+        "newspaper headline",
+        "stock market news",
+        "date april 17"
+      ],
+      "on_screen_text": "今年4月17号，A股出了条新闻。一家陕西的公司，股价1445块，超过了贵州茅台。",
+      "duration": 0.0,
+      "visual_type": "event",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 3,
+      "visual_description": "社交媒体界面滚动，显示“茅台魔咒破了”等热门评论，旁边显示数字1242亿",
+      "search_keywords": [
+        "social media feed",
+        "stock market reaction",
+        "number 1242"
+      ],
+      "on_screen_text": "全网都在喊：茅台魔咒破了，新股王诞生。我当时看了一眼它的市值，1242亿。",
+      "duration": 0.0,
+      "visual_type": "text_animation",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 4,
+      "visual_description": "分屏对比图表，上方显示1.76万亿与14倍差距，下方显示营收对比6亿vs1720亿及286倍差距",
+      "search_keywords": [
+        "bar chart comparison",
+        "financial data",
+        "revenue difference"
+      ],
+      "on_screen_text": "同一天，茅台的市值是1.76万亿。差了14倍。再看营收，这家公司去年6个亿，茅台1720亿，差286倍。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 5,
+      "visual_description": "微距镜头拍摄发着蓝光的微小芯片，背景虚化显示公司名“源杰科技”及光芯片标签",
+      "search_keywords": [
+        "micro chip",
+        "optical chip",
+        "blinking light"
+      ],
+      "on_screen_text": "它只是每股贵，不是公司大。这家公司叫源杰科技，做光芯片的。",
+      "duration": 0.0,
+      "visual_type": "landscape",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 6,
+      "visual_description": "抽象的数据可视化图形，显示全球市占率23.6%的占比环图，旁边标注第二名住友电工",
+      "search_keywords": [
+        "pie chart",
+        "market share",
+        "global ranking"
+      ],
+      "on_screen_text": "800G、1.6T光模块里那颗发光的芯片，全球市占率23.6%，排第二，仅次于日本住友。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 7,
+      "visual_description": "繁忙的工厂生产线特写，叠加上升的箭头，显示营收16亿及增长320%的数据",
+      "search_keywords": [
+        "factory production line",
+        "rising arrow",
+        "revenue growth"
+      ],
+      "on_screen_text": "国内能稳定量产的，基本就它一家。订单排到2027年。它的业绩是真的。前三季度营收16亿，涨了320%；",
+      "duration": 0.0,
+      "visual_type": "event",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 8,
+      "visual_description": "数字动态特效展示净利10.24亿及毛利率79.58%，随后画面切至K线冲顶的视觉隐喻",
+      "search_keywords": [
+        "profit data",
+        "percentage text",
+        "stock price spike"
+      ],
+      "on_screen_text": "净利10.24亿，涨了867%；毛利率79.58%。所以它涨，有道理。但涨到1445块，是另一回事。",
+      "duration": 0.0,
+      "visual_type": "text_animation",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 9,
+      "visual_description": "小容量的硬币堆叠意象，旁边出现巨大的股价数字1967，暗示盘子小易被拉升",
+      "search_keywords": [
+        "stack of coins",
+        "small market cap",
+        "stock price 1967"
+      ],
+      "on_screen_text": "它的总股本只有1.25亿股，盘子小，股价容易被顶上去。两个月后，6月23号，它冲到1967块。",
+      "duration": 0.0,
+      "visual_type": "concept",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 10,
+      "visual_description": "K线图从高点急剧下跌至673元，跌幅66%的红色箭头明显，背景昏暗",
+      "search_keywords": [
+        "stock crash",
+        "red downward arrow",
+        "price drop"
+      ],
+      "on_screen_text": "再往后，就是往下走。11月13号收673块，从高点跌了66%。公司没坏。是价格配不上故事了。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 11,
+      "visual_description": "分屏对比：左侧是飞速旋转的抽象时钟代表预期，右侧是缓慢建设的工厂代表现实",
+      "search_keywords": [
+        "abstract clock",
+        "factory construction",
+        "expectation vs reality"
+      ],
+      "on_screen_text": "这就是股价和市值的区别。股价是预期，市值是现实。预期可以一天翻倍，现实得一座工厂一座工厂地盖。",
+      "duration": 0.0,
+      "visual_type": "concept",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 12,
+      "visual_description": "过渡画面，展示另一个股票K线稳步向上的趋势，暗示真实的榜首诞生",
+      "search_keywords": [
+        "steady rising chart",
+        "new leader",
+        "stock trend"
+      ],
+      "on_screen_text": "同一年，A股还有另一个榜首，那个是真的。",
+      "duration": 0.0,
+      "visual_type": "landscape",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 13,
+      "visual_description": "长鑫科技上市敲钟现场，背景大屏显示市值3.28万亿，工商银行标志在旁显示第二位",
+      "search_keywords": [
+        "stock market bell",
+        "listing ceremony",
+        "value 3.28 trillion"
+      ],
+      "on_screen_text": "7月27号，长鑫科技上市第一天，市值3.28万亿，把工商银行挤到了第二。",
+      "duration": 0.0,
+      "visual_type": "event",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 14,
+      "visual_description": "巨大的12英寸晶圆在洁净室中被机械臂夹取，体现高端制造的分量",
+      "search_keywords": [
+        "silicon wafer",
+        "clean room",
+        "semiconductor manufacturing"
+      ],
+      "on_screen_text": "一家做存储芯片的，超过了中国最大的银行。这个不是情绪。这个是一座12英寸晶圆厂的分量。",
+      "duration": 0.0,
+      "visual_type": "event",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 15,
+      "visual_description": "两个奖杯或皇冠并排，一个碎裂代表短暂，一个稳固代表永久，总结一年内的变化",
+      "search_keywords": [
+        "broken trophy",
+        "stable crown",
+        "time lapse"
+      ],
+      "on_screen_text": "一年之内，A股换了两个榜首。一个只撑了几个月，一个可能是永久的。",
+      "duration": 0.0,
+      "visual_type": "text_animation",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 16,
+      "visual_description": "屏幕中央显示两个对比鲜明的排名列表，中间出现一道裂缝或分隔线，象征差异。",
+      "search_keywords": [
+        "comparison",
+        "ranking",
+        "contrast",
+        "split"
+      ],
+      "on_screen_text": "这两个榜首之间的差别，就是我今天想讲的事。一、GDP回答不了的问题先说另一个数。",
+      "duration": 0.0,
+      "visual_type": "concept",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 17,
+      "visual_description": "中国国家统计局大楼外观，叠加动态数字特效显示“107.1万亿”和“4.6%”。",
+      "search_keywords": [
+        "china statistics bureau",
+        "building",
+        "gdp number",
+        "chart"
+      ],
+      "on_screen_text": "10月19号，统计局公布前三季度GDP：107.1万亿，增长4.6%。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 18,
+      "visual_description": "一条平缓下滑的折线图，标注第一季度5.0、第二季度4.3、第三季度4.5。",
+      "search_keywords": [
+        "line chart",
+        "downward trend",
+        "quarterly data",
+        "graph"
+      ],
+      "on_screen_text": "一季度5.0，二季度4.3，三季度4.5，一条很平的下坡线。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 19,
+      "visual_description": "新闻发布会现场，记者举手提问，背景有“GDP”或“经济政策”字样的横幅。",
+      "search_keywords": [
+        "press conference",
+        "reporter",
+        "question",
+        "news"
+      ],
+      "on_screen_text": "发布会上的问题都很务实：全年目标完不完得成，政策还有多少空间。",
+      "duration": 0.0,
+      "visual_type": "event",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 20,
+      "visual_description": "抽象画面，一个代表“生长”的绿叶和一个代表“死亡”的枯叶混合在一个平均化的灰色球体中。",
+      "search_keywords": [
+        "growth vs decline",
+        "abstract concept",
+        "average",
+        "mix"
+      ],
+      "on_screen_text": "没人问：这里面，什么东西在长，什么东西在死。因为GDP回答不了这个问题。GDP是个平均数。",
+      "duration": 0.0,
+      "visual_type": "concept",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 21,
+      "visual_description": "分屏画面，左侧是高科技光模块工厂高速运转，右侧是传统钢厂停产或锈迹斑斑，中间数字融合为4.6%。",
+      "search_keywords": [
+        "tech factory",
+        "steel plant",
+        "contrast",
+        "average"
+      ],
+      "on_screen_text": "它把一家光模块公司的211%和一家钢厂的下滑，平均成了4.6%。它看不见谁在长骨头，谁在烂。",
+      "duration": 0.0,
+      "visual_type": "concept",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 22,
+      "visual_description": "股票交易屏幕的特写，K线图剧烈波动，叠加“2026”年份字样和问号。",
+      "search_keywords": [
+        "stock market",
+        "k line chart",
+        "fluctuation",
+        "2026"
+      ],
+      "on_screen_text": "以前我们说，股市是经济的晴雨表。这话在2026年，太糙了。",
+      "duration": 0.0,
+      "visual_type": "event",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 23,
+      "visual_description": "医疗CT机扫描人体的画面，隐喻为扫描经济结构，屏幕显示内部密度差异。",
+      "search_keywords": [
+        "ct scan",
+        "medical imaging",
+        "body scan",
+        "internal structure"
+      ],
+      "on_screen_text": "晴雨表只告诉你下不下雨，不告诉你身体里哪块在长、哪块在坏。A股现在更像一台CT机。",
+      "duration": 0.0,
+      "visual_type": "concept",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 24,
+      "visual_description": "CT平扫图像，显示宏观轮廓清晰，数据浮层显示“56.7万亿营收”、“73%盈利”。",
+      "search_keywords": [
+        "ct scan plain",
+        "medical data",
+        "revenue",
+        "profit"
+      ],
+      "on_screen_text": "平扫，看轮廓：56.7万亿营收，5.1万亿净利，73%的公司赚钱。挺好，看不出毛病。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 25,
+      "visual_description": "CT增强扫描图像，高亮显示高密度和低密度区域，对比鲜明，标注“利润增长4倍”与“亏损”。",
+      "search_keywords": [
+        "ct scan contrast",
+        "density difference",
+        "profit vs loss",
+        "medical"
+      ],
+      "on_screen_text": "增强扫描，看密度差：同一个季度，有的板块利润涨四倍，有的板块还在亏。这个密度差，才是真信息。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 26,
+      "visual_description": "科创板指数图表，箭头急剧向上，数字“474.6%”巨大且带有惊叹符号或发光效果。",
+      "search_keywords": [
+        "star market",
+        "stock chart",
+        "growth",
+        "surge"
+      ],
+      "on_screen_text": "二、第一层：新大陆和旧伤疤先看个数：科创板，前三季度净利增长474.6%。我第一次看到，以为是印错了。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 27,
+      "visual_description": "一个巨大的积木块（代表长鑫科技）被从一组积木中抽走，剩余部分高度依然较高，标注“106.9%”。",
+      "search_keywords": [
+        "building blocks",
+        "removal",
+        "contribution",
+        "chart"
+      ],
+      "on_screen_text": "没印错。但有个前提：长鑫科技一家，贡献了1320亿的利润增量。把这一个拿掉，科创板还涨106.9%。",
+      "duration": 0.0,
+      "visual_type": "diagram",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 28,
+      "visual_description": "动态图表对比，一条线从106%跳跃至474%，另一条线平稳在22.7%，旁边有历史档案图标。",
+      "search_keywords": [
+        "comparison chart",
+        "growth rate",
+        "history",
+        "jump"
+      ],
+      "on_screen_text": "一家公司，把板块增速从106%拉到474%。这事儿A股历史上没发生过。创业板22.7%。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 29,
+      "visual_description": "一个巨大的、沉重的锚或岩石，标注“1.1%”，显得静止不动，周围有问号。",
+      "search_keywords": [
+        "anchor",
+        "heavy object",
+        "stagnation",
+        "question mark"
+      ],
+      "on_screen_text": "沪市主板，1.1%。1.1%什么概念？",
+      "duration": 0.0,
+      "visual_type": "concept",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 30,
+      "visual_description": "银行、石油钻井、基础设施和电力塔的剪影排列，整体呈静止状态，背景为灰色调。",
+      "search_keywords": [
+        "banks",
+        "oil rig",
+        "infrastructure",
+        "power grid"
+      ],
+      "on_screen_text": "就是A股最重的那批公司，银行、石油、基建、电力，加在一起基本上没动。",
+      "duration": 0.0,
+      "visual_type": "landscape",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 31,
+      "visual_description": "天平一边是静止的旧行业块，另一边是飞速增长的AI芯片图形，背景有向上箭头",
+      "search_keywords": [
+        "balance scale",
+        "ai chip",
+        "growth arrow",
+        "contrast"
+      ],
+      "on_screen_text": "它们还占着市场三分之一的利润，但已经不贡献增量了。增量在哪？AI板块净利涨281%。",
+      "duration": 0.0,
+      "visual_type": "concept",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 32,
+      "visual_description": "屏幕显示一排具体的百分比数字：321.8%，121.9%，108.9%，96.8%，65.3%，对应不同芯片图标",
+      "search_keywords": [
+        "stock market numbers",
+        "circuit board",
+        "data statistics",
+        "green text"
+      ],
+      "on_screen_text": "存储芯片321.8%，光模块121.9%，PCB108.9%，GPU96.8%，半导体设备65.3%。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 33,
+      "visual_description": "图表展示电子行业188.2%和有色金属87.9%的增长柱状图，中间穿插公司营收和净利数据",
+      "search_keywords": [
+        "bar chart",
+        "financial report",
+        "electronics industry",
+        "mining"
+      ],
+      "on_screen_text": "电子行业188.2%，有色金属87.9%。中际旭创，营收695亿，净利222亿，涨211%。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 34,
+      "visual_description": "一个现代机器人站立特写，旁边浮现现金入账的图标或数字3.87亿，强调真实利润",
+      "search_keywords": [
+        "robot humanoid",
+        "money cash",
+        "tech startup",
+        "profit"
+      ],
+      "on_screen_text": "宇树科技，做机器人的，净利3.87亿,涨270%。这些不是概念。这是打到账上的钱。",
+      "duration": 0.0,
+      "visual_type": "portrait",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 35,
+      "visual_description": "折线图显示占比从30%缓慢上升至35%，画面色调转冷，暗示坏消息",
+      "search_keywords": [
+        "line chart upward",
+        "percentage increase",
+        "economic trend",
+        "cool tone"
+      ],
+      "on_screen_text": "新经济在A股利润里的占比，已经从五年前的30%涨到35%。但我得说句扫兴的话。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 36,
+      "visual_description": "分屏画面，左边是繁忙的电子工厂或数据中心（代表订单），右边是静止的金属仓库（代表涨价）",
+      "search_keywords": [
+        "electronics factory",
+        "metal warehouse",
+        "split screen",
+        "industry comparison"
+      ],
+      "on_screen_text": "电子涨188%，有色涨87.9%，这两个数性质完全不一样。电子是真订单。",
+      "duration": 0.0,
+      "visual_type": "concept",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 37,
+      "visual_description": "大型数据中心机房内部，光纤连接，同时背景浮现价格上涨的图表箭头",
+      "search_keywords": [
+        "data center server",
+        "fiber optics",
+        "inflation chart",
+        "ai infrastructure"
+      ],
+      "on_screen_text": "全球AI在修机房，光模块排到明年。有色是涨价。前三季度PPI涨2.3%，比去年回升5.1个百分点。",
+      "duration": 0.0,
+      "visual_type": "event",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 38,
+      "visual_description": "四个图标代表石油、煤炭、化工、有色，每个图标旁标注对应的增长百分比数字",
+      "search_keywords": [
+        "oil pump",
+        "coal mining",
+        "chemical plant",
+        "copper metal"
+      ],
+      "on_screen_text": "石油石化涨32.9%，煤炭27.6%，化工27.2%，有色87.9%。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 39,
+      "visual_description": "两个齿轮或方块，分别标记'技术'和'价格'，共同推动一个大箭头向上",
+      "search_keywords": [
+        "gear mechanism",
+        "technology and price",
+        "driving force",
+        "abstract concept"
+      ],
+      "on_screen_text": "这四个行业，拉动了整个A股盈利增长的5.9个百分点。一个是技术，一个是价格。",
+      "duration": 0.0,
+      "visual_type": "diagram",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 40,
+      "visual_description": "饼图或分母大数字5572，其中只有不到一半的高亮区域表示2657家增长，其余灰暗",
+      "search_keywords": [
+        "pie chart",
+        "majority minority",
+        "company list",
+        "data visualization"
+      ],
+      "on_screen_text": "把涨价当成新动能，是今年最容易犯的错。再看另一面。5572家公司，只有2657家利润增长。47.68%。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 41,
+      "visual_description": "房地产建筑模型坍塌或变灰，旁边出现红色的亏损数字534亿",
+      "search_keywords": [
+        "real estate building",
+        "red negative number",
+        "loss symbol",
+        "construction site"
+      ],
+      "on_screen_text": "超过一半的A股公司，这个季度交了白卷。房地产还在亏，主板地产公司合计亏534亿。",
+      "duration": 0.0,
+      "visual_type": "event",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 42,
+      "visual_description": "多个行业图标（家电、汽车、食品等）呈现下降趋势箭头，光伏板背景有下跌曲线",
+      "search_keywords": [
+        "falling stocks",
+        "solar panel",
+        "declining industry",
+        "down arrow"
+      ],
+      "on_screen_text": "家电、汽车、食品饮料、非银金融，13个行业利润下滑。光伏还在消化产能，板块年内跌了29.87%。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 43,
+      "visual_description": "巨大的银行标志或建筑，占据画面三分之一，旁边标注1.73万亿和2.1%的微幅增长",
+      "search_keywords": [
+        "bank building",
+        "massive size",
+        "slow growth",
+        "financial institution"
+      ],
+      "on_screen_text": "银行赚了1.73万亿，涨2.1%。听着还行？但它占全A利润的三分之一。",
+      "duration": 0.0,
+      "visual_type": "landscape",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 44,
+      "visual_description": "解剖示意图，显示一个巨大的器官（银行）承担身体大部分重量，标注'以量补价'概念",
+      "search_keywords": [
+        "anatomy metaphor",
+        "heavy load",
+        "medical illustration",
+        "structural weakness"
+      ],
+      "on_screen_text": "三分之一的体重压在一个器官上，而这个器官基本不长了。它现在的增长方式叫\"以量补价\"，多放贷款，补息差。",
+      "duration": 0.0,
+      "visual_type": "diagram",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 45,
+      "visual_description": "财务报表页面特写，借钱多的行业对应利润停滞的图表，画面聚焦于因果关系的逻辑链",
+      "search_keywords": [
+        "financial statements",
+        "debt ratio",
+        "causal loop",
+        "report analysis"
+      ],
+      "on_screen_text": "为什么政策一直在托，旧动能还是难？A股把答案写在报表里了：借钱越多的行业，再多借一点，利润越拉不动。",
+      "duration": 0.0,
+      "visual_type": "diagram",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 46,
+      "visual_description": "央行大楼外观与贷款数据图表叠加，显示贷款增量下降",
+      "search_keywords": [
+        "People's Bank of China",
+        "loan data chart",
+        "finance building",
+        "economic statistics"
+      ],
+      "on_screen_text": "看央行前三季度的数。给实体经济的贷款，增加11.5万亿，比去年少增3.04万亿。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 47,
+      "visual_description": "企业债券和股票融资柱状图对比，显示显著增长趋势",
+      "search_keywords": [
+        "corporate bond issuance",
+        "stock financing chart",
+        "financial growth bars",
+        "market funding"
+      ],
+      "on_screen_text": "企业债净融资2.75万亿，比去年多1.18万亿，是去年的1.75倍。股票融资5359亿，多增2191亿。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 48,
+      "visual_description": "饼图展示社融结构，权益融资占比超过贷款，配文字“换了个借法”",
+      "search_keywords": [
+        "social financing pie chart",
+        "equity vs debt ratio",
+        "financial structure diagram",
+        "investment shift"
+      ],
+      "on_screen_text": "债券加股票，占社融增量的49.48%，比贷款还多7.6个百分点。这不是没人借钱。这是换了个借法。",
+      "duration": 0.0,
+      "visual_type": "diagram",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 49,
+      "visual_description": "分屏对比：钢厂抵押土地与芯片公司依靠技术融资的抽象概念图",
+      "search_keywords": [
+        "steel mill factory",
+        "semiconductor chip technology",
+        "business collateral contrast",
+        "tech innovation abstract"
+      ],
+      "on_screen_text": "一个钢厂要扩建，去银行押地。一个芯片公司要扩建，去科创板发股票。它没有地可以押，它只有技术和订单。",
+      "duration": 0.0,
+      "visual_type": "concept",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 50,
+      "visual_description": "A股K线图历史走势叠加，突出“分红超过融资”的里程碑时刻",
+      "search_keywords": [
+        "stock market chart",
+        "dividend history timeline",
+        "A share milestone",
+        "financial record"
+      ],
+      "on_screen_text": "三、第二层：钱往哪走，人就往哪走今年A股有件事，三十年第一次。上市公司给股东的钱，超过了从市场拿走的钱。",
+      "duration": 0.0,
+      "visual_type": "event",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 51,
+      "visual_description": "证监会主席吴清在金融街论坛演讲现场，背景有2.1万亿数据字幕",
+      "search_keywords": [
+        "Wu Qing speech",
+        "financial forum event",
+        "stock exchange chairman",
+        "conference stage"
+      ],
+      "on_screen_text": "证监会主席吴清在10月的金融街论坛上给了个数：年内分红回购2.1万亿，",
+      "duration": 0.0,
+      "visual_type": "portrait",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 52,
+      "visual_description": "倍数对比视觉图，2.7倍的大数字强调分红回购与融资的比例",
+      "search_keywords": [
+        "multiplier comparison",
+        "ratio visualization",
+        "financial data highlight",
+        "2.7x number"
+      ],
+      "on_screen_text": "是同期IPO融资和再融资的2.7倍。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 53,
+      "visual_description": "数据列表展示公司分红数量和金额，以及回购公司的统计信息",
+      "search_keywords": [
+        "corporate dividend list",
+        "share buyback statistics",
+        "financial data table",
+        "company earnings distribution"
+      ],
+      "on_screen_text": "拆开看。截至11月11号，3713家公司分红，合计2.29万亿。1200多家回购，超过1370亿。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 54,
+      "visual_description": "向上箭头动画配合“历史新高”文字，展示2025分红率数据",
+      "search_keywords": [
+        "record high chart",
+        "dividend yield increase",
+        "all time high text",
+        "financial growth arrow"
+      ],
+      "on_screen_text": "2025年全年分红2.4万亿，分红率44.9%，都是历史新高。钱从哪来？",
+      "duration": 0.0,
+      "visual_type": "text_animation",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 55,
+      "visual_description": "代表社保、保险、年金的图标向股市资金流向图注资，显示净买入额",
+      "search_keywords": [
+        "social security fund icon",
+        "insurance capital flow",
+        "pension investment chart",
+        "long term fund inflow"
+      ],
+      "on_screen_text": "社保、保险、年金，年初以来净买入超过6000亿。",
+      "duration": 0.0,
+      "visual_type": "diagram",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 56,
+      "visual_description": "“国九条”政策文件与A股市值增长曲线叠加，显示85%涨幅",
+      "search_keywords": [
+        "policy document",
+        "market capitalization growth",
+        "policy impact chart",
+        "institutional holding increase"
+      ],
+      "on_screen_text": "新\"国九条\"两年多，这类资金持有A股流通市值涨了85%，净买入大概1.3万亿。制度也在动。",
+      "duration": 0.0,
+      "visual_type": "diagram",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 57,
+      "visual_description": "央行与证监会会议场景，文件上标注“回购增持再贷款”制度变更",
+      "search_keywords": [
+        "central bank meeting",
+        "regulatory document",
+        "policy announcement",
+        "financial regulation scene"
+      ],
+      "on_screen_text": "11月2号，央行和证监会连开两场会，把股票回购增持再贷款从阶段性安排改成长期制度，",
+      "duration": 0.0,
+      "visual_type": "event",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 58,
+      "visual_description": "利率标签从1.25%变为1%的动态数字变化，背景为银行标志",
+      "search_keywords": [
+        "interest rate change",
+        "bank logo",
+        "percentage decrease animation",
+        "monetary policy rate"
+      ],
+      "on_screen_text": "利率从1.25%降到1%。",
+      "duration": 0.0,
+      "visual_type": "text_animation",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 59,
+      "visual_description": "互换便利、ETF获批等金融工具关键词快速闪现，视觉化枯燥概念",
+      "search_keywords": [
+        "financial jargon text",
+        "ETF approval document",
+        "swap facility concept",
+        "complex finance terms"
+      ],
+      "on_screen_text": "互换便利余额1050亿，启动第三批。首批18只主动ETF获批。这些词听着枯燥。",
+      "duration": 0.0,
+      "visual_type": "concept",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 60,
+      "visual_description": "天平动画，一端是“融资市”，一端是“投资市”，投资市一侧下沉获胜",
+      "search_keywords": [
+        "balance scale metaphor",
+        "investment vs financing",
+        "market transformation concept",
+        "financial philosophy shift"
+      ],
+      "on_screen_text": "它们合起来指向一件事：A股在从\"融资市\"变成\"投资市\"。这件事比指数涨到多少点重要得多。",
+      "duration": 0.0,
+      "visual_type": "concept",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 61,
+      "visual_description": "一个家庭银行账户余额从存款和房产图标流向股票K线图的抽象动画，背景为城市剪影",
+      "search_keywords": [
+        "money transfer",
+        "stock market chart",
+        "house icon",
+        "banking icon"
+      ],
+      "on_screen_text": "因为老百姓的钱从存款、房子挪到股票，前提从来不是\"股市会涨\"，是\"回报可验证\"。",
+      "duration": 0.0,
+      "visual_type": "concept",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 62,
+      "visual_description": "企业股票分红支票、回购文件与社保保险标识同时出现，象征长期资金流入",
+      "search_keywords": [
+        "corporate dividend",
+        "stock repurchase",
+        "insurance policy",
+        "social security card"
+      ],
+      "on_screen_text": "当一家公司连着五年分红，当回购注销成了常态，当社保和保险愿意把十年的钱放进来，居民才敢把储蓄搬过来。",
+      "duration": 0.0,
+      "visual_type": "diagram",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 63,
+      "visual_description": "文字‘信任不是喊出来的，是分出来的’动态浮现，随后画面切换至毛利率图表局部",
+      "search_keywords": [
+        "text overlay",
+        "margin chart",
+        "trust concept",
+        "financial data"
+      ],
+      "on_screen_text": "信任不是喊出来的，是分出来的。还有一层，藏在毛利率里。",
+      "duration": 0.0,
+      "visual_type": "text_animation",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 64,
+      "visual_description": "对比图表展示海外业务毛利率23.1%与国内18%，以柱状图形式呈现",
+      "search_keywords": [
+        "bar chart",
+        "gross margin comparison",
+        "manufacturing data",
+        "domestic vs overseas"
+      ],
+      "on_screen_text": "截至今年上半年，A股中游装备制造公司的海外业务毛利率23.1%，国内业务大概18%。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 65,
+      "visual_description": "时间轴动画显示2021年海外毛利率19.4%，并向上延伸至当前更高数值，强调差距扩大",
+      "search_keywords": [
+        "timeline animation",
+        "percentage increase",
+        "2021 data point",
+        "margin growth"
+      ],
+      "on_screen_text": "2021年，海外毛利率还只有19.4%。海外比国内更赚钱，而且差距在扩大。十年前不是这样。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 66,
+      "visual_description": "集装箱货轮与中间品货物（如电子元件、机械模块）堆叠，标注47.5%占比",
+      "search_keywords": [
+        "cargo ship",
+        "intermediate goods",
+        "export container",
+        "47.5 percent label"
+      ],
+      "on_screen_text": "那时候\"出海\"意味着低价、薄利、多销。变化来自出口结构。2025年，中国出口里中间品占比47.5%。",
+      "duration": 0.0,
+      "visual_type": "event",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 67,
+      "visual_description": "饼图或环形图显示中间品占出口总值超过一半，突出比例变化",
+      "search_keywords": [
+        "pie chart",
+        "over half share",
+        "export value",
+        "intermediates ratio"
+      ],
+      "on_screen_text": "今年前三季度，中间品占出口总值超过一半。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 68,
+      "visual_description": "动态数字滚动：23.2万亿出口额、+16.4%、集成电路+99.1%、电动车+72.3%、锂电池+36.4%",
+      "search_keywords": [
+        "export volume 23.2 trillion",
+        "semiconductor growth 99.1%",
+        "EV growth 72.3%",
+        "lithium battery growth"
+      ],
+      "on_screen_text": "出口23.2万亿，涨16.4%，其中集成电路涨99.1%，电动汽车涨72.3%，锂电池涨36.4%。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 69,
+      "visual_description": "工厂生产线传送带输送精密部件，叠加文字‘装备制造业贡献近九成出口增量’",
+      "search_keywords": [
+        "manufacturing assembly line",
+        "precision components",
+        "export increment",
+        "industrial equipment"
+      ],
+      "on_screen_text": "装备制造业贡献了近九成出口增量。中间品是什么？是别人拿去做成品的零件、设备、模块。",
+      "duration": 0.0,
+      "visual_type": "event",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 70,
+      "visual_description": "对比画面：左侧为成品消费品，右侧为嵌入全球供应链的核心模块，体现不可替代性",
+      "search_keywords": [
+        "finished goods vs components",
+        "global supply chain link",
+        "irreplaceable position",
+        "manufacturing module"
+      ],
+      "on_screen_text": "卖成品，赚的是一次性的价差。卖中间品，赚的是全球产业链里一个不容易被换掉的位置。",
+      "duration": 0.0,
+      "visual_type": "concept",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 71,
+      "visual_description": "三一重工工程车在海外市场作业，叠加‘320亿营收、61%占比’数据标签",
+      "search_keywords": [
+        "Sany heavy machinery",
+        "overseas construction site",
+        "revenue 32 billion",
+        "61 percent share"
+      ],
+      "on_screen_text": "三一重工上半年海外收入320亿，涨21.8%，占总营收61%。",
+      "duration": 0.0,
+      "visual_type": "event",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 72,
+      "visual_description": "中际旭创光模块产品特写，背景浮现微软、谷歌、Meta Logo，象征AI算力支撑",
+      "search_keywords": [
+        "optical module close up",
+        "Microsoft Google Meta logos",
+        "AI capital expenditure",
+        "manufacturing partner"
+      ],
+      "on_screen_text": "中际旭创的客户名单里，是微软、谷歌、Meta。它的利润表，本质上是中国工厂在为全球AI资本开支代工。",
+      "duration": 0.0,
+      "visual_type": "portrait",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 73,
+      "visual_description": "文字‘A股已不能用内需解释’居中放大，背景为模糊的国内消费场景",
+      "search_keywords": [
+        "text emphasis",
+        "domestic demand irrelevant",
+        "stock market shift",
+        "abstract background"
+      ],
+      "on_screen_text": "所以A股已经很难用\"内需\"两个字解释了。",
+      "duration": 0.0,
+      "visual_type": "text_animation",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 74,
+      "visual_description": "三条曲线分别代表全球AI资本开支、制造业再布局、能源转型，汇聚于利润表结构",
+      "search_keywords": [
+        "three trend lines",
+        "AI capex curve",
+        "manufacturing reallocation",
+        "energy transition graph"
+      ],
+      "on_screen_text": "它的利润表里，装着全球AI资本开支、全球制造业再布局、全球能源转型三条外部曲线。",
+      "duration": 0.0,
+      "visual_type": "diagram",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 75,
+      "visual_description": "天平两端：一侧标‘卖能力’更高估值，另一侧‘卖产能’较低估值，动画倾斜",
+      "search_keywords": [
+        "balance scale animation",
+        "capability valuation",
+        "capacity pricing",
+        "premium value"
+      ],
+      "on_screen_text": "中国制造在从\"卖成品\"变成\"卖能力\"。而市场给\"能力\"的估值，永远高于给\"产能\"的估值。",
+      "duration": 0.0,
+      "visual_type": "text_animation",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 76,
+      "visual_description": "深蓝色背景上，巨大的数字“8.5%”向上跳动，伴随上升的箭头和金色光效，强调创四年新高的概念。",
+      "search_keywords": [
+        "rising stock chart",
+        "financial growth arrow",
+        "profit increase animation",
+        "abstract business success"
+      ],
+      "on_screen_text": "四、第三层：为什么利润涨了，你没感觉这是今年最该问的一个问题。三季报净利涨8.5%，创四年新高。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 77,
+      "visual_description": "分屏画面：左侧是下跌的红色K线图，中间是工厂忙碌的流水线，右侧是疲惫打工人看着手机账户皱眉的特写，三者并列展示。",
+      "search_keywords": [
+        "factory production line",
+        "tired office worker phone",
+        "falling stock market chart",
+        "split screen contrast"
+      ],
+      "on_screen_text": "指数从4100点跌到3634点。企业说订单排到明年，股民说账户还在亏，打工人说年终奖没涨。三个都是真的。",
+      "duration": 0.0,
+      "visual_type": "event",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 78,
+      "visual_description": "抽象概念图，一个天平或两个分离的盒子，分别标记为“预期”和“事实”，中间有断层，背景为极简几何线条。",
+      "search_keywords": [
+        "abstract concept balance",
+        "gap between expectation and reality",
+        "geometric minimal background",
+        "financial theory illustration"
+      ],
+      "on_screen_text": "因为它们在三个不同的层面上。第一，股价定的是预期差，不是绝对增速。",
+      "duration": 0.0,
+      "visual_type": "diagram",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 79,
+      "visual_description": "动态图表展示半导体指数飙升曲线，背景中有闪烁的电子芯片图案，数字“106%”和“70”以高亮形式浮现。",
+      "search_keywords": [
+        "semiconductor chip macro",
+        "rocket launch metaphor",
+        "upward green chart",
+        "tech boom visual"
+      ],
+      "on_screen_text": "上半年半导体指数涨了106%，70只个股翻倍，把三季报的好消息提前定价完了。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 80,
+      "visual_description": "一个充满的电池图标慢慢变空，或者气球放气的动画，象征“意外”消失，背景虚化的股票交易屏幕。",
+      "search_keywords": [
+        "deflating balloon",
+        "empty battery icon",
+        "stock trading screen blur",
+        "expectation fade out"
+      ],
+      "on_screen_text": "等报表真出来，利润是真的，但\"超预期\"没了。市场卖的不是事实，是意外。第二，盈利修复的广度不够。",
+      "duration": 0.0,
+      "visual_type": "concept",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 81,
+      "visual_description": "环形图或堆积柱状图，突出显示“52%”未增长的部分，旁边列出电子、有色、通信的图标，显示增量集中。",
+      "search_keywords": [
+        "pie chart 52 percent",
+        "color coded sectors",
+        "concentration bar chart",
+        "financial data visualization"
+      ],
+      "on_screen_text": "52%的公司利润没增长，增量高度集中在电子、有色、通信几个赛道。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 82,
+      "visual_description": "冷色调画面，房地产工地静止画面与传统服务业（如餐厅、零售店）空旷门口的对比，表现收缩感。",
+      "search_keywords": [
+        "empty retail store",
+        "real estate construction site",
+        "cool blue tone",
+        "economic contraction scene"
+      ],
+      "on_screen_text": "就业最密集的行业，地产链、传统服务、部分消费，恰恰在收缩的那一侧。",
+      "duration": 0.0,
+      "visual_type": "landscape",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 83,
+      "visual_description": "三组数据对比条，分别显示5.0%、1.0%和1.1%的增长率，服务零售条明显长于商品零售条，背景干净。",
+      "search_keywords": [
+        "comparative bar chart",
+        "retail sales data",
+        "percentage comparison",
+        "clean infographic"
+      ],
+      "on_screen_text": "看消费数据就明白：前三季度服务零售额涨5.0%，商品零售只涨1.0%，社零总额涨1.1%。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 84,
+      "visual_description": "快速剪辑蒙太奇：旅游风景、健身房运动、手机通讯界面，节奏轻快，表现服务消费的活力。",
+      "search_keywords": [
+        "travel lifestyle montage",
+        "sports and gym",
+        "digital communication interface",
+        "fast paced consumer activity"
+      ],
+      "on_screen_text": "人们在从\"买东西\"转向\"买服务\"，旅游、文体、通讯信息服务都很快。",
+      "duration": 0.0,
+      "visual_type": "event",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 85,
+      "visual_description": "分割画面，左侧是繁忙的服务场景，右侧是A股上市标志，中间有一道不可逾越的墙或断开链接图标，表示脱节。",
+      "search_keywords": [
+        "disconnected link icon",
+        "service industry vs stock market",
+        "abstract barrier wall",
+        "missing connection visual"
+      ],
+      "on_screen_text": "但服务业的就业和收入效应，很难进A股的利润表，因为最大的几家服务平台，大多不在A股上市。",
+      "duration": 0.0,
+      "visual_type": "concept",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 86,
+      "visual_description": "数字“1.03万亿”和“1.14万亿”向下掉落或流入黑暗处，背景是居民手持钞票还债的示意图或负增长箭头。",
+      "search_keywords": [
+        "negative loan data",
+        "money flowing away",
+        "debt reduction visual",
+        "downward arrow finance"
+      ],
+      "on_screen_text": "第三，居民还在还债。前三季度住户贷款减少1.03万亿，短期贷款减少1.14万亿。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 87,
+      "visual_description": "一个人在艰难地背着沉重的包袱行走，背景是上涨的股市指数虚化图，表现居民行为与指数无关的疏离感。",
+      "search_keywords": [
+        "person carrying heavy bag",
+        "walking against trend",
+        "indifferent individual",
+        "economic resilience concept"
+      ],
+      "on_screen_text": "居民不是在加杠杆，是在还钱。一个正在还债的部门，不会因为指数涨了两百点就改主意。",
+      "duration": 0.0,
+      "visual_type": "portrait",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 88,
+      "visual_description": "抽象的双向流动图，一端汇聚的光点（利润）向少数集中，另一端扩散的暗色区域（疼痛）向多数蔓延。",
+      "search_keywords": [
+        "concentration vs diffusion",
+        "abstract light particles",
+        "inequality visual metaphor",
+        "dual flow diagram"
+      ],
+      "on_screen_text": "所以\"盈利修复\"和\"体感寒冷\"不矛盾。它们是同一场迁移的两端：利润在向少数人集中，疼痛在向多数人扩散。",
+      "duration": 0.0,
+      "visual_type": "diagram",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 89,
+      "visual_description": "官方文件质感的背景，高亮显示“内在稳定性”五个字，字体庄重，周围有轻微的科技感光晕。",
+      "search_keywords": [
+        "official document text",
+        "highlighted keyword",
+        "stable market concept",
+        "formal financial policy"
+      ],
+      "on_screen_text": "理解了这一点，才能读懂政策的语言。证监会的说法是\"完善稳市机制，增强股市内在稳定性\"。注意用词。",
+      "duration": 0.0,
+      "visual_type": "text_animation",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 90,
+      "visual_description": "文字动画依次划掉“活跃”和“信心”，最终定格在“内在稳定性”上，强调语气的转变。",
+      "search_keywords": [
+        "text deletion animation",
+        "keyword emphasis",
+        "semantic shift visual",
+        "minimalist typography"
+      ],
+      "on_screen_text": "不是\"活跃资本市场\"，不是\"提振信心\"，是\"内在稳定性\"。",
+      "duration": 0.0,
+      "visual_type": "text_animation",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 91,
+      "visual_description": "展示金融交易界面与货币循环的抽象概念图，体现流动性互换机制。",
+      "search_keywords": [
+        "financial trading screen",
+        "money circulation concept",
+        "bank liquidity abstract"
+      ],
+      "on_screen_text": "11月2号那套组合拳也一样：互换便利解决机构的流动性错配，回购增持再贷款让产业资本有钱托底，",
+      "duration": 0.0,
+      "visual_type": "concept",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 92,
+      "visual_description": "表现长期资金流动的管道与降息曲线向下的图表，对比收益变化。",
+      "search_keywords": [
+        "long term investment pipeline",
+        "interest rate curve downward",
+        "financial flow diagram"
+      ],
+      "on_screen_text": "主动ETF给长期资金提供载体，降息让回购的成本低于分红的收益。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 93,
+      "visual_description": "一个缓冲垫或减震器吸收冲击的动画，象征降低下跌烈度而非制造上涨。",
+      "search_keywords": [
+        "shock absorber buffer",
+        "impact absorption animation",
+        "risk mitigation concept"
+      ],
+      "on_screen_text": "这些政策的共同点是：它们不制造上涨，它们降低下跌的烈度。目标很清楚。",
+      "duration": 0.0,
+      "visual_type": "concept",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 94,
+      "visual_description": "天平两侧分别放置代表‘定价能力’的精密仪器和代表‘波动率可控’的稳固容器。",
+      "search_keywords": [
+        "balance scale precision",
+        "stable container metaphor",
+        "financial stability concept"
+      ],
+      "on_screen_text": "让资本市场成为新动能高效的融资场所，同时成为居民财富的稳定容器。前者要定价能力，后者要波动率可控。",
+      "duration": 0.0,
+      "visual_type": "diagram",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 95,
+      "visual_description": "文字动画强调‘与牛市无关’，背景为平静的静态图表，否定疯狂上涨。",
+      "search_keywords": [
+        "calm market chart",
+        "text emphasis not bull market",
+        "steady financial growth"
+      ],
+      "on_screen_text": "这两件事，都跟牛市无关。",
+      "duration": 0.0,
+      "visual_type": "text_animation",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 96,
+      "visual_description": "旧的周期链条断裂，新的科技节点亮起，指数中枢向上抬升的趋势线。",
+      "search_keywords": [
+        "old cycle to new economy transition",
+        "upward trend line",
+        "industrial upgrade concept"
+      ],
+      "on_screen_text": "所以可以预期的是：当A股盈利结构完成从旧周期到新经济的切换，指数中枢的抬升不再靠放水，靠赚钱。",
+      "duration": 0.0,
+      "visual_type": "diagram",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 97,
+      "visual_description": "从流动性的水波过渡到产业工厂的齿轮，对比两种牛市驱动力的差异。",
+      "search_keywords": [
+        "liquidity water waves",
+        "industry factory gears",
+        "economic driver transition"
+      ],
+      "on_screen_text": "过去牛市靠流动性，未来牛市靠产业。五、结语：分化，恰恰是A股的诚实回到最开始那两个榜首。",
+      "duration": 0.0,
+      "visual_type": "concept",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 98,
+      "visual_description": "一颗发光的芯片特写，背景是K线图上价格的剧烈波动后回归平稳。",
+      "search_keywords": [
+        "glowing chip semiconductor",
+        "stock price fluctuation",
+        "tech market repricing"
+      ],
+      "on_screen_text": "源杰科技当股王那天，市场在给一颗芯片定价。三个月后，价格回到622块，市场又在给同一颗芯片重新定价。",
+      "duration": 0.0,
+      "visual_type": "event",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 99,
+      "visual_description": "晶圆厂生产线全景，价格标签静止不动，对比情绪波动与产业稳健。",
+      "search_keywords": [
+        "wafer factory production line",
+        "stable industrial value",
+        "semiconductor manufacturing"
+      ],
+      "on_screen_text": "长鑫科技登顶那天，市场在给一座晶圆厂定价。这个价格，到今天还没怎么动。一个在定价情绪，一个在定价产业。",
+      "duration": 0.0,
+      "visual_type": "landscape",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 100,
+      "visual_description": "巨大的中国地图背景，叠加上升的GDP柱状图，展示经济体量。",
+      "search_keywords": [
+        "China map GDP growth",
+        "economic scale visualization",
+        "national economy chart"
+      ],
+      "on_screen_text": "A股同时干这两件事，而且从不掩饰。GDP告诉你中国有多大。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 101,
+      "visual_description": "动态仪表盘显示四个关键数据：107.1万亿、4.6%、5.2%、0.9%。",
+      "search_keywords": [
+        "financial dashboard metrics",
+        "GDP and unemployment data",
+        "economic indicators screen"
+      ],
+      "on_screen_text": "107.1万亿的前三季度总量，4.6%的增速，5.2%的失业率，0.9%的CPI。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 102,
+      "visual_description": "全球主要经济体增速对比条形图，中国4.6%位居前列，底座稳固。",
+      "search_keywords": [
+        "global growth comparison chart",
+        "China leading economy",
+        "solid economic foundation"
+      ],
+      "on_screen_text": "这个经济体没有失速，底盘还在，4.6%在全球主要经济体里还是领跑的。但GDP是个平均数。",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 103,
+      "visual_description": "放大镜下，巨大的211%增长与下滑部分被平均计算成4.6%的视觉隐喻。",
+      "search_keywords": [
+        "magnifying glass data average",
+        "growth and decline contrast",
+        "statistical smoothing concept"
+      ],
+      "on_screen_text": "它把211%和下滑，平均成了4.6%。A股告诉你中国正在变成什么。",
+      "duration": 0.0,
+      "visual_type": "diagram",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 104,
+      "visual_description": "科创板指数陡峭上升与主板平行的对比，电子板块与地产板块的反向运动。",
+      "search_keywords": [
+        "STAR market vs main board",
+        "sector divergence chart",
+        "tech vs real estate gap"
+      ],
+      "on_screen_text": "它用科创板474.6%和沪市主板1.1%的鸿沟，用电子涨188%和地产亏损的对照，",
+      "duration": 0.0,
+      "visual_type": "data_visual",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 105,
+      "visual_description": "分红回购资金流入箭头远超融资流出箭头，海外毛利率高于国内的对比图示。",
+      "search_keywords": [
+        "buyback vs financing flow",
+        "overseas vs domestic margin",
+        "financial cash flow comparison"
+      ],
+      "on_screen_text": "用分红回购2.1万亿对融资的2.7倍超越，用海外毛利率23.1%对国内18%的倒挂，",
+      "duration": 0.0,
+      "visual_type": "diagram",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 106,
+      "visual_description": "透明的数据流被层层剥离，像洋葱一样摊开在黑色桌面上。",
+      "search_keywords": [
+        "abstract data layers",
+        "layered structure",
+        "digital deconstruction"
+      ],
+      "on_screen_text": "把这些结构一层层扫出来，摊在你面前。",
+      "duration": 0.0,
+      "visual_type": "concept",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 107,
+      "visual_description": "A股市场的红色与绿色数字在黑色屏幕上跳动，旁边出现三处高亮标记。",
+      "search_keywords": [
+        "stock market screen",
+        "financial data",
+        "A share ticker"
+      ],
+      "on_screen_text": "A股没说谎。它只是说得太具体了，具体到让人不舒服。它说了三件事。",
+      "duration": 0.0,
+      "visual_type": "event",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 108,
+      "visual_description": "一条曲线从左侧虚线区域穿过，进入右侧实线发光区域，上方有‘故事’到‘利润’的标签变化。",
+      "search_keywords": [
+        "growth curve",
+        "transition diagram",
+        "business profit line"
+      ],
+      "on_screen_text": "第一，新动能已经从\"故事\"走到了\"利润\"。",
+      "duration": 0.0,
+      "visual_type": "diagram",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 109,
+      "visual_description": "芯片、光模块和机器人模型依次亮起，旁边展示着利润表的绿色数字验证标识。",
+      "search_keywords": [
+        "semiconductor chip",
+        "laser module",
+        "humanoid robot",
+        "financial ledger"
+      ],
+      "on_screen_text": "AI、半导体、光模块、机器人，这些词第一次能在利润表上被验证，而不是只在研报的假设里。",
+      "duration": 0.0,
+      "visual_type": "event",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 110,
+      "visual_description": "一栋灰暗的建筑、太阳能板阵列和银行大楼并排，上面标注着亏损与去产能的红色图标。",
+      "search_keywords": [
+        "real estate building",
+        "solar farm",
+        "bank building",
+        "capacity adjustment"
+      ],
+      "on_screen_text": "第二，旧动能的出清还没完。地产还在亏，光伏还在去产能，银行靠以量补价维持2.1%的增长。",
+      "duration": 0.0,
+      "visual_type": "landscape",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 111,
+      "visual_description": "一个隧道内部，远处有微弱亮光，前景有人被不同颜色的光线分开，象征不均匀的代价。",
+      "search_keywords": [
+        "tunnel with light",
+        "divided crowd",
+        "light and shadow"
+      ],
+      "on_screen_text": "隧道尽头有光，但隧道还长。第三，这场迁移的代价是不均匀的。利润流向少数行业，疼痛留在多数人身上。",
+      "duration": 0.0,
+      "visual_type": "landscape",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 112,
+      "visual_description": "宏观经济温度计在上升，但微观人物面部表情显得冷峻，显示体感变冷。",
+      "search_keywords": [
+        "economic thermometer",
+        "cooling face",
+        "macro vs micro economy"
+      ],
+      "on_screen_text": "这就是为什么宏观数据在好转，微观体感在变冷。一年前，\"新旧动能转换\"还是文件里的词。",
+      "duration": 0.0,
+      "visual_type": "concept",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 113,
+      "visual_description": "一份带有CT扫描图案的报告，八个字“新骨已生，旧伤未愈”以打字机效果逐字显现。",
+      "search_keywords": [
+        "medical CT report",
+        "diagnosis text",
+        "typewriter effect"
+      ],
+      "on_screen_text": "今天，它是一份能逐行读的三季报。CT机的诊断书上只写了八个字：新骨已生，旧伤未愈。",
+      "duration": 0.0,
+      "visual_type": "text_animation",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 114,
+      "visual_description": "人体骨架动画中，重量正向一侧新的骨架结构移动，旧结构逐渐暗淡。",
+      "search_keywords": [
+        "skeleton animation",
+        "weight transfer",
+        "body structure"
+      ],
+      "on_screen_text": "而身体的重量，正在向新的骨架转移。",
+      "duration": 0.0,
+      "visual_type": "concept",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 115,
+      "visual_description": "黑色背景上白色文本快速滚动，显示国家统计局、央行等数据来源。",
+      "search_keywords": [
+        "data source scrolling",
+        "government statistics",
+        "financial data text"
+      ],
+      "on_screen_text": "数据来源：国家统计局2026年前三季度国民经济运行数据、中国人民银行2026年前三季度金融统计数据报告、",
+      "duration": 0.0,
+      "visual_type": "text_animation",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 116,
+      "visual_description": "海关大厦、交易所屏幕与证券公司logo依次出现，构成数据来源的视觉拼贴。",
+      "search_keywords": [
+        "customs house building",
+        "stock exchange screen",
+        "securities company logo"
+      ],
+      "on_screen_text": "海关总署进出口数据、沪深交易所上市公司2026年三季报、中国证监会公开表态及2026金融街论坛年会发言、",
+      "duration": 0.0,
+      "visual_type": "event",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 117,
+      "visual_description": "最后部分文本渐显，列出华创证券、财经媒体等，形成完整的数据来源列表。",
+      "search_keywords": [
+        "research institution text",
+        "financial media logos",
+        "data source listing"
+      ],
+      "on_screen_text": "华创证券研究、每日经济新闻及财联社相关报道。",
+      "duration": 0.0,
+      "visual_type": "text_animation",
+      "needs_effect": false
+    }
+  ]
+}

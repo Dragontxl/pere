@@ -1,0 +1,821 @@
+[
+  {
+    "scene_id": 1,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_1\\img_3_6284.jpg",
+    "match_score": 10,
+    "reason": "图片匹配分数 10.000 达标"
+  },
+  {
+    "scene_id": 2,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_2\\img_3_9148.jpg",
+    "match_score": 30,
+    "reason": "图片匹配分数 30.000 达标"
+  },
+  {
+    "scene_id": 3,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_3\\img_5_9727.jpg",
+    "match_score": 20,
+    "reason": "视觉类型 text_animation 适合编码视频实现"
+  },
+  {
+    "scene_id": 4,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_4\\img_3_7768.jpg",
+    "match_score": 20,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 5,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_5\\img_1_9059.jpg",
+    "match_score": 10,
+    "reason": "图片匹配分数 10.000 达标"
+  },
+  {
+    "scene_id": 6,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_6\\img_3_4054.jpg",
+    "match_score": 30,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 7,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_7\\img_3_1534.jpg",
+    "match_score": 20,
+    "reason": "图片匹配分数 20.000 达标"
+  },
+  {
+    "scene_id": 8,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_8\\img_5_3129.jpg",
+    "match_score": 40,
+    "reason": "视觉类型 text_animation 适合编码视频实现"
+  },
+  {
+    "scene_id": 9,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_9\\img_4_4844.jpg",
+    "match_score": 30,
+    "reason": "图片匹配分数 30.000 达标"
+  },
+  {
+    "scene_id": 10,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_10\\img_3_7890.jpg",
+    "match_score": 30,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 11,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_11\\img_2_3910.jpg",
+    "match_score": 10,
+    "reason": "图片匹配分数 10.000 达标"
+  },
+  {
+    "scene_id": 12,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_12\\img_2_8676.jpg",
+    "match_score": 80,
+    "reason": "图片匹配分数 80.000 达标"
+  },
+  {
+    "scene_id": 13,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_13\\img_1_9303.jpg",
+    "match_score": 10,
+    "reason": "图片匹配分数 10.000 达标"
+  },
+  {
+    "scene_id": 14,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_14\\img_2_2967.jpg",
+    "match_score": 20,
+    "reason": "图片匹配分数 20.000 达标"
+  },
+  {
+    "scene_id": 15,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_15\\img_4_6826.jpg",
+    "match_score": 40,
+    "reason": "视觉类型 text_animation 适合编码视频实现"
+  },
+  {
+    "scene_id": 16,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_16\\img_3_4703.jpg",
+    "match_score": 30,
+    "reason": "图片匹配分数 30.000 达标"
+  },
+  {
+    "scene_id": 17,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_17\\img_1_7597.jpg",
+    "match_score": 20,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 18,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_18\\img_2_1089.jpg",
+    "match_score": 20,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 19,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_19\\img_3_3334.jpg",
+    "match_score": 60,
+    "reason": "图片匹配分数 60.000 达标"
+  },
+  {
+    "scene_id": 20,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_20\\img_4_1404.jpg",
+    "match_score": 10,
+    "reason": "图片匹配分数 10.000 达标"
+  },
+  {
+    "scene_id": 21,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_21\\img_2_7638.jpg",
+    "match_score": 5,
+    "reason": "图片匹配分数 5.000 达标"
+  },
+  {
+    "scene_id": 22,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_22\\img_1_9969.jpg",
+    "match_score": 30,
+    "reason": "图片匹配分数 30.000 达标"
+  },
+  {
+    "scene_id": 23,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_23\\img_1_7053.jpg",
+    "match_score": 50,
+    "reason": "图片匹配分数 50.000 达标"
+  },
+  {
+    "scene_id": 24,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_24\\img_7_2019.jpg",
+    "match_score": 5,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 25,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_25\\img_4_1849.jpg",
+    "match_score": 10,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 26,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_26\\img_3_5690.jpg",
+    "match_score": 10,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 27,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_27\\img_1_6369.jpg",
+    "match_score": 20,
+    "reason": "视觉类型 diagram 适合编码视频实现"
+  },
+  {
+    "scene_id": 28,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_28\\img_2_1315.jpg",
+    "match_score": 20,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 29,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_29\\img_5_6321.jpg",
+    "match_score": 20,
+    "reason": "图片匹配分数 20.000 达标"
+  },
+  {
+    "scene_id": 30,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_30\\img_5_4310.jpg",
+    "match_score": 30,
+    "reason": "图片匹配分数 30.000 达标"
+  },
+  {
+    "scene_id": 31,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_31\\img_5_8966.jpg",
+    "match_score": 10,
+    "reason": "图片匹配分数 10.000 达标"
+  },
+  {
+    "scene_id": 32,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_32\\img_5_2476.jpg",
+    "match_score": 20,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 33,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_33\\img_2_7943.jpg",
+    "match_score": 30,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 34,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_34\\img_1_9333.jpg",
+    "match_score": 30,
+    "reason": "图片匹配分数 30.000 达标"
+  },
+  {
+    "scene_id": 35,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_35\\img_6_3513.jpg",
+    "match_score": 20,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 36,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_36\\img_1_9869.jpg",
+    "match_score": 20,
+    "reason": "图片匹配分数 20.000 达标"
+  },
+  {
+    "scene_id": 37,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_37\\img_5_9651.jpg",
+    "match_score": 30,
+    "reason": "图片匹配分数 30.000 达标"
+  },
+  {
+    "scene_id": 38,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_38\\img_5_9889.jpg",
+    "match_score": 0.19078777730464935,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 39,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_39\\img_4_6522.jpg",
+    "match_score": 30,
+    "reason": "视觉类型 diagram 适合编码视频实现"
+  },
+  {
+    "scene_id": 40,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_40\\img_3_7688.jpg",
+    "match_score": 30,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 41,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_41\\img_2_5110.jpg",
+    "match_score": 0.2307930886745453,
+    "reason": "图片匹配未达标（0.231），使用最佳候选"
+  },
+  {
+    "scene_id": 42,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_42\\img_3_4175.jpg",
+    "match_score": 20,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 43,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_43\\img_2_9259.jpg",
+    "match_score": 30,
+    "reason": "图片匹配分数 30.000 达标"
+  },
+  {
+    "scene_id": 44,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_44\\img_5_8086.jpg",
+    "match_score": 5,
+    "reason": "视觉类型 diagram 适合编码视频实现"
+  },
+  {
+    "scene_id": 45,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_45\\img_5_6712.jpg",
+    "match_score": 35,
+    "reason": "视觉类型 diagram 适合编码视频实现"
+  },
+  {
+    "scene_id": 46,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_46\\img_1_8998.jpg",
+    "match_score": 0.24056798219680786,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 47,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_47\\img_3_6844.jpg",
+    "match_score": 30,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 48,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_48\\img_1_2141.jpg",
+    "match_score": 30,
+    "reason": "视觉类型 diagram 适合编码视频实现"
+  },
+  {
+    "scene_id": 49,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_49\\img_2_2541.jpg",
+    "match_score": 20,
+    "reason": "图片匹配分数 20.000 达标"
+  },
+  {
+    "scene_id": 50,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_50\\img_2_7033.jpg",
+    "match_score": 30,
+    "reason": "图片匹配分数 30.000 达标"
+  },
+  {
+    "scene_id": 51,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_51\\img_2_4330.jpg",
+    "match_score": 10,
+    "reason": "图片匹配分数 10.000 达标"
+  },
+  {
+    "scene_id": 52,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_52\\img_1_8497.jpg",
+    "match_score": 20,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 53,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_53\\img_2_6851.jpg",
+    "match_score": 60,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 54,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_54\\img_5_5178.jpg",
+    "match_score": 20,
+    "reason": "视觉类型 text_animation 适合编码视频实现"
+  },
+  {
+    "scene_id": 55,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_55\\img_4_2029.jpg",
+    "match_score": 20,
+    "reason": "视觉类型 diagram 适合编码视频实现"
+  },
+  {
+    "scene_id": 56,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_56\\img_5_3175.jpg",
+    "match_score": 0.17580647766590118,
+    "reason": "视觉类型 diagram 适合编码视频实现"
+  },
+  {
+    "scene_id": 57,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_57\\img_3_7898.jpg",
+    "match_score": 10,
+    "reason": "图片匹配分数 10.000 达标"
+  },
+  {
+    "scene_id": 58,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_58\\img_5_8668.jpg",
+    "match_score": 10,
+    "reason": "视觉类型 text_animation 适合编码视频实现"
+  },
+  {
+    "scene_id": 59,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_59\\img_4_5614.jpg",
+    "match_score": 75,
+    "reason": "图片匹配分数 75.000 达标"
+  },
+  {
+    "scene_id": 60,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_60\\img_7_8033.jpg",
+    "match_score": 20,
+    "reason": "图片匹配分数 20.000 达标"
+  },
+  {
+    "scene_id": 61,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_61\\img_3_1897.jpg",
+    "match_score": 10,
+    "reason": "图片匹配分数 10.000 达标"
+  },
+  {
+    "scene_id": 62,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_62\\img_3_8853.jpg",
+    "match_score": 20,
+    "reason": "视觉类型 diagram 适合编码视频实现"
+  },
+  {
+    "scene_id": 63,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_63\\img_4_8719.jpg",
+    "match_score": 0.18182489275932312,
+    "reason": "视觉类型 text_animation 适合编码视频实现"
+  },
+  {
+    "scene_id": 64,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_64\\img_1_3054.jpg",
+    "match_score": 30,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 65,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_65\\img_5_5121.jpg",
+    "match_score": 0.20996135473251343,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 66,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_66\\img_3_3372.jpg",
+    "match_score": 30,
+    "reason": "图片匹配分数 30.000 达标"
+  },
+  {
+    "scene_id": 67,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_67\\img_5_4940.jpg",
+    "match_score": 65,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 68,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_68\\img_2_1773.jpg",
+    "match_score": 10,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 69,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_69\\img_5_1971.jpg",
+    "match_score": 30,
+    "reason": "图片匹配分数 30.000 达标"
+  },
+  {
+    "scene_id": 70,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_70\\img_7_7673.jpg",
+    "match_score": 40,
+    "reason": "图片匹配分数 40.000 达标"
+  },
+  {
+    "scene_id": 71,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_71\\img_3_9668.jpg",
+    "match_score": 30,
+    "reason": "图片匹配分数 30.000 达标"
+  },
+  {
+    "scene_id": 72,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_72\\img_4_6026.jpg",
+    "match_score": 20,
+    "reason": "图片匹配分数 20.000 达标"
+  },
+  {
+    "scene_id": 73,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_73\\img_3_9552.jpg",
+    "match_score": 10,
+    "reason": "视觉类型 text_animation 适合编码视频实现"
+  },
+  {
+    "scene_id": 74,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_74\\img_3_4932.jpg",
+    "match_score": 20,
+    "reason": "视觉类型 diagram 适合编码视频实现"
+  },
+  {
+    "scene_id": 75,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_75\\img_2_6819.jpg",
+    "match_score": 30,
+    "reason": "视觉类型 text_animation 适合编码视频实现"
+  },
+  {
+    "scene_id": 76,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_76\\img_3_1466.jpg",
+    "match_score": 20,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 77,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_77\\img_3_7323.jpg",
+    "match_score": 20,
+    "reason": "图片匹配分数 20.000 达标"
+  },
+  {
+    "scene_id": 78,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_78\\img_3_7239.jpg",
+    "match_score": 30,
+    "reason": "视觉类型 diagram 适合编码视频实现"
+  },
+  {
+    "scene_id": 79,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_79\\img_5_1585.jpg",
+    "match_score": 10,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 80,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_80\\img_1_6003.jpg",
+    "match_score": 10,
+    "reason": "图片匹配分数 10.000 达标"
+  },
+  {
+    "scene_id": 81,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_81\\img_2_3107.jpg",
+    "match_score": 20,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 82,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_82\\img_4_4543.jpg",
+    "match_score": 40,
+    "reason": "图片匹配分数 40.000 达标"
+  },
+  {
+    "scene_id": 83,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_83\\img_5_9569.jpg",
+    "match_score": 30,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 84,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_84\\img_1_1931.jpg",
+    "match_score": 20,
+    "reason": "图片匹配分数 20.000 达标"
+  },
+  {
+    "scene_id": 85,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_85\\img_4_1761.jpg",
+    "match_score": 20,
+    "reason": "图片匹配分数 20.000 达标"
+  },
+  {
+    "scene_id": 86,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_86\\img_1_3046.jpg",
+    "match_score": 20,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 87,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_87\\img_4_1175.jpg",
+    "match_score": 20,
+    "reason": "图片匹配分数 20.000 达标"
+  },
+  {
+    "scene_id": 88,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_88\\img_5_7932.jpg",
+    "match_score": 20,
+    "reason": "视觉类型 diagram 适合编码视频实现"
+  },
+  {
+    "scene_id": 89,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_89\\img_5_3728.jpg",
+    "match_score": 20,
+    "reason": "视觉类型 text_animation 适合编码视频实现"
+  },
+  {
+    "scene_id": 90,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_90\\img_4_4164.jpg",
+    "match_score": 20,
+    "reason": "视觉类型 text_animation 适合编码视频实现"
+  },
+  {
+    "scene_id": 91,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_91\\img_2_5657.jpg",
+    "match_score": 65,
+    "reason": "图片匹配分数 65.000 达标"
+  },
+  {
+    "scene_id": 92,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_92\\img_3_2794.jpg",
+    "match_score": 30,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 93,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_93\\img_4_8229.jpg",
+    "match_score": 85,
+    "reason": "图片匹配分数 85.000 达标"
+  },
+  {
+    "scene_id": 94,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_94\\img_3_8380.jpg",
+    "match_score": 50,
+    "reason": "视觉类型 diagram 适合编码视频实现"
+  },
+  {
+    "scene_id": 95,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_95\\img_4_4133.jpg",
+    "match_score": 20,
+    "reason": "视觉类型 text_animation 适合编码视频实现"
+  },
+  {
+    "scene_id": 96,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_96\\img_2_8558.jpg",
+    "match_score": 10,
+    "reason": "视觉类型 diagram 适合编码视频实现"
+  },
+  {
+    "scene_id": 97,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_97\\img_3_8832.jpg",
+    "match_score": 20,
+    "reason": "图片匹配分数 20.000 达标"
+  },
+  {
+    "scene_id": 98,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_98\\img_3_8719.jpg",
+    "match_score": 10,
+    "reason": "图片匹配分数 10.000 达标"
+  },
+  {
+    "scene_id": 99,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_99\\img_3_4492.jpg",
+    "match_score": 10,
+    "reason": "图片匹配分数 10.000 达标"
+  },
+  {
+    "scene_id": 100,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_100\\img_3_1145.jpg",
+    "match_score": 10,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 101,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_101\\img_5_8892.jpg",
+    "match_score": 20,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 102,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_102\\img_3_8202.jpg",
+    "match_score": 40,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 103,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_103\\img_3_6865.jpg",
+    "match_score": 30,
+    "reason": "视觉类型 diagram 适合编码视频实现"
+  },
+  {
+    "scene_id": 104,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_104\\img_5_4335.jpg",
+    "match_score": 0.1832498162984848,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 105,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_105\\img_2_6106.jpg",
+    "match_score": 5,
+    "reason": "视觉类型 diagram 适合编码视频实现"
+  },
+  {
+    "scene_id": 106,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_106\\img_6_1545.jpg",
+    "match_score": 60,
+    "reason": "图片匹配分数 60.000 达标"
+  },
+  {
+    "scene_id": 107,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_107\\img_2_4397.jpg",
+    "match_score": 65,
+    "reason": "图片匹配分数 65.000 达标"
+  },
+  {
+    "scene_id": 108,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_108\\img_3_3202.jpg",
+    "match_score": 10,
+    "reason": "视觉类型 diagram 适合编码视频实现"
+  },
+  {
+    "scene_id": 109,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_109\\img_1_3736.jpg",
+    "match_score": 20,
+    "reason": "图片匹配分数 20.000 达标"
+  },
+  {
+    "scene_id": 110,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_110\\img_1_5625.jpg",
+    "match_score": 10,
+    "reason": "图片匹配分数 10.000 达标"
+  },
+  {
+    "scene_id": 111,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_111\\img_4_6505.jpg",
+    "match_score": 70,
+    "reason": "图片匹配分数 70.000 达标"
+  },
+  {
+    "scene_id": 112,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_112\\img_4_6743.jpg",
+    "match_score": 20,
+    "reason": "图片匹配分数 20.000 达标"
+  },
+  {
+    "scene_id": 113,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_113\\img_1_1869.jpg",
+    "match_score": 30,
+    "reason": "视觉类型 text_animation 适合编码视频实现"
+  },
+  {
+    "scene_id": 114,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_114\\img_5_4413.jpg",
+    "match_score": 10,
+    "reason": "图片匹配分数 10.000 达标"
+  },
+  {
+    "scene_id": 115,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_115\\img_4_2904.jpg",
+    "match_score": 10,
+    "reason": "视觉类型 text_animation 适合编码视频实现"
+  },
+  {
+    "scene_id": 116,
+    "implementation": "image",
+    "asset_path": "real_test\\api_run\\temp\\scene_116\\img_2_2306.jpg",
+    "match_score": 20,
+    "reason": "图片匹配分数 20.000 达标"
+  },
+  {
+    "scene_id": 117,
+    "implementation": "remotion",
+    "asset_path": "real_test\\api_run\\temp\\scene_117\\img_1_4177.jpg",
+    "match_score": 5,
+    "reason": "视觉类型 text_animation 适合编码视频实现"
+  }
+]

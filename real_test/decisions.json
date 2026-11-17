@@ -1,0 +1,177 @@
+[
+  {
+    "scene_id": 1,
+    "implementation": "image",
+    "asset_path": "F:\\Programs\\pexel-remotion\\real_test\\temp\\scene_1\\img_2_3539.jpg",
+    "match_score": 10,
+    "reason": "图片匹配分数 10.000 达标"
+  },
+  {
+    "scene_id": 2,
+    "implementation": "remotion",
+    "asset_path": "F:\\Programs\\pexel-remotion\\real_test\\temp\\scene_2\\img_1_5560.jpg",
+    "match_score": 30,
+    "reason": "视觉类型 text_animation 适合编码视频实现"
+  },
+  {
+    "scene_id": 3,
+    "implementation": "image",
+    "asset_path": "F:\\Programs\\pexel-remotion\\real_test\\temp\\scene_3\\img_3_4131.jpg",
+    "match_score": 20,
+    "reason": "图片匹配分数 20.000 达标"
+  },
+  {
+    "scene_id": 4,
+    "implementation": "image",
+    "asset_path": "F:\\Programs\\pexel-remotion\\real_test\\temp\\scene_4\\img_3_4009.jpg",
+    "match_score": 10,
+    "reason": "图片匹配分数 10.000 达标"
+  },
+  {
+    "scene_id": 5,
+    "implementation": "image",
+    "asset_path": "F:\\Programs\\pexel-remotion\\real_test\\temp\\scene_5\\img_4_3026.jpg",
+    "match_score": 30,
+    "reason": "图片匹配分数 30.000 达标"
+  },
+  {
+    "scene_id": 6,
+    "implementation": "image",
+    "asset_path": "F:\\Programs\\pexel-remotion\\real_test\\temp\\scene_6\\img_4_8096.jpg",
+    "match_score": 5,
+    "reason": "图片匹配分数 5.000 达标"
+  },
+  {
+    "scene_id": 7,
+    "implementation": "remotion",
+    "asset_path": "F:\\Programs\\pexel-remotion\\real_test\\temp\\scene_7\\img_3_4247.jpg",
+    "match_score": 30,
+    "reason": "视觉类型 diagram 适合编码视频实现"
+  },
+  {
+    "scene_id": 8,
+    "implementation": "remotion",
+    "asset_path": "F:\\Programs\\pexel-remotion\\real_test\\temp\\scene_8\\img_2_8267.jpg",
+    "match_score": 40,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 9,
+    "implementation": "image",
+    "asset_path": "F:\\Programs\\pexel-remotion\\real_test\\temp\\scene_9\\img_2_9985.jpg",
+    "match_score": 10,
+    "reason": "图片匹配分数 10.000 达标"
+  },
+  {
+    "scene_id": 10,
+    "implementation": "remotion",
+    "asset_path": "F:\\Programs\\pexel-remotion\\real_test\\temp\\scene_10\\img_4_9638.jpg",
+    "match_score": 0.20473122596740723,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 11,
+    "implementation": "image",
+    "asset_path": "F:\\Programs\\pexel-remotion\\real_test\\temp\\scene_11\\img_2_4277.jpg",
+    "match_score": 10,
+    "reason": "图片匹配分数 10.000 达标"
+  },
+  {
+    "scene_id": 12,
+    "implementation": "image",
+    "asset_path": "F:\\Programs\\pexel-remotion\\real_test\\temp\\scene_12\\img_2_4922.jpg",
+    "match_score": 20,
+    "reason": "图片匹配分数 20.000 达标"
+  },
+  {
+    "scene_id": 13,
+    "implementation": "image",
+    "asset_path": "F:\\Programs\\pexel-remotion\\real_test\\temp\\scene_13\\img_4_9539.jpg",
+    "match_score": 10,
+    "reason": "图片匹配分数 10.000 达标"
+  },
+  {
+    "scene_id": 14,
+    "implementation": "remotion",
+    "asset_path": "F:\\Programs\\pexel-remotion\\real_test\\temp\\scene_14\\img_1_6544.jpg",
+    "match_score": 20,
+    "reason": "视觉类型 diagram 适合编码视频实现"
+  },
+  {
+    "scene_id": 15,
+    "implementation": "remotion",
+    "asset_path": "F:\\Programs\\pexel-remotion\\real_test\\temp\\scene_15\\img_5_7641.jpg",
+    "match_score": 10,
+    "reason": "视觉类型 data_visual 适合编码视频实现"
+  },
+  {
+    "scene_id": 16,
+    "implementation": "image",
+    "asset_path": "F:\\Programs\\pexel-remotion\\real_test\\temp\\scene_16\\img_1_3987.jpg",
+    "match_score": 5,
+    "reason": "图片匹配分数 5.000 达标"
+  },
+  {
+    "scene_id": 17,
+    "implementation": "image",
+    "asset_path": "F:\\Programs\\pexel-remotion\\real_test\\temp\\scene_17\\img_2_1457.jpg",
+    "match_score": 0.20259207487106323,
+    "reason": "图片匹配未达标（0.203），使用最佳候选"
+  },
+  {
+    "scene_id": 18,
+    "implementation": "image",
+    "asset_path": "F:\\Programs\\pexel-remotion\\real_test\\temp\\scene_18\\img_4_8881.jpg",
+    "match_score": 10,
+    "reason": "图片匹配分数 10.000 达标"
+  },
+  {
+    "scene_id": 19,
+    "implementation": "image",
+    "asset_path": "F:\\Programs\\pexel-remotion\\real_test\\temp\\scene_19\\img_2_2079.jpg",
+    "match_score": 0.21144625544548035,
+    "reason": "图片匹配未达标（0.211），使用最佳候选"
+  },
+  {
+    "scene_id": 20,
+    "implementation": "image",
+    "asset_path": "F:\\Programs\\pexel-remotion\\real_test\\temp\\scene_20\\img_4_4191.jpg",
+    "match_score": 1010,
+    "reason": "图片匹配分数 1010.000 达标"
+  },
+  {
+    "scene_id": 21,
+    "implementation": "remotion",
+    "asset_path": "F:\\Programs\\pexel-remotion\\real_test\\temp\\scene_21\\img_2_7808.jpg",
+    "match_score": 5,
+    "reason": "视觉类型 text_animation 适合编码视频实现"
+  },
+  {
+    "scene_id": 22,
+    "implementation": "image",
+    "asset_path": "F:\\Programs\\pexel-remotion\\real_test\\temp\\scene_22\\img_2_4694.jpg",
+    "match_score": 10,
+    "reason": "图片匹配分数 10.000 达标"
+  },
+  {
+    "scene_id": 23,
+    "implementation": "image",
+    "asset_path": "F:\\Programs\\pexel-remotion\\real_test\\temp\\scene_23\\img_4_1539.jpg",
+    "match_score": 10,
+    "reason": "图片匹配分数 10.000 达标"
+  },
+  {
+    "scene_id": 24,
+    "implementation": "remotion",
+    "asset_path": "F:\\Programs\\pexel-remotion\\real_test\\temp\\scene_24\\img_1_7510.jpg",
+    "match_score": 20,
+    "reason": "视觉类型 diagram 适合编码视频实现"
+  },
+  {
+    "scene_id": 25,
+    "implementation": "image",
+    "asset_path": "F:\\Programs\\pexel-remotion\\real_test\\temp\\scene_25\\img_1_5477.jpg",
+    "match_score": 5,
+    "reason": "图片匹配分数 5.000 达标"
+  }
+]

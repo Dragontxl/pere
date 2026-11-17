@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# 输出
+assets/
+temp/
+output/
+*.mp4
+*.mp3
+*.wav
+*.srt
+
+# Remotion
+remotion/node_modules/
+remotion/dist/
+remotion/.remotion/
+
+# Backend (Cloudflare Workers)
+backend/node_modules/
+backend/.wrangler/
+backend/.wrangler-home/
+backend/.dev.vars
+
+# Frontend (Cloudflare Pages)
+frontend/node_modules/
+frontend/dist/
+frontend/.wrangler/
+
+# 环境变量
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+.DS_Store
+
+# 临时
+temp_article.txt
+article.txt
+
+# 密钥与凭证
+*.key
+*.pem
+credentials.json

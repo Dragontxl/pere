@@ -1,0 +1,354 @@
+{
+  "scenes": [
+    {
+      "scene_id": 1,
+      "visual_description": "国家新闻联播风格的发布会现场，大屏幕显示中国地图和经济数据，随后切换至GDP增长曲线图，曲线平缓。",
+      "search_keywords": [
+        "经济发布会",
+        "GDP数据",
+        "China economy data",
+        "economic news broadcast"
+      ],
+      "on_screen_text": "根据国新办发布会，国家统计局公布前三季度经济数据：GDP 107.1万亿元，同比增长4.6%。一条平缓得几乎看不出情绪的下行曲线。",
+      "duration": 12.0,
+      "visual_type": "event",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 2,
+      "visual_description": "手机屏幕特写，微信群聊界面，快速滚动显示股票讨论和数字，背景虚化为办公室或家庭环境。",
+      "search_keywords": [
+        "手机聊天",
+        "股票群",
+        "mobile chat",
+        "stock group"
+      ],
+      "on_screen_text": "而投资群里在传另一组数字。A股三季报收官：5572家公司，营收56.7万亿元，净利润5.1万亿元，同比增长8.3%。",
+      "duration": 12.0,
+      "visual_type": "text_animation",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 3,
+      "visual_description": "高科技工厂内部，光模块生产线或服务器机房，蓝色灯光，数据流特效叠加，展示巨大的增长数字。",
+      "search_keywords": [
+        "光模块工厂",
+        "数据中心",
+        "optical module",
+        "data center"
+      ],
+      "on_screen_text": "其中一家做光模块的公司，前三季度净利222.4亿元，同比增长211.81%——三年前，它全年的利润还不到这个数字的十分之一。",
+      "duration": 15.0,
+      "visual_type": "event",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 4,
+      "visual_description": "分裂画面：左侧是平静的湖面或平缓曲线（代表GDP），右侧是剧烈波动的股票K线（代表A股），中间出现巨大的问号或对比符号。",
+      "search_keywords": [
+        "对比",
+        "股市波动",
+        "contrast",
+        "stock volatility"
+      ],
+      "on_screen_text": "4.6%和211.81%，同一天，同一个国家。",
+      "duration": 6.0,
+      "visual_type": "concept",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 5,
+      "visual_description": "一个人站在静止的水面上，水面下隐约可见剧烈的机械运动或能量流动，隐喻总量平稳下的结构变化。",
+      "search_keywords": [
+        "水面下",
+        "冰山理论",
+        "underwater",
+        "iceberg theory"
+      ],
+      "on_screen_text": "如果你只看前者，你会觉得这是一个增长放缓、波澜不惊的经济体。如果你看后者，你会意识到：在总量几乎静止的水面之下，一场产业权力的交接已经完成——只是它发生在报表里，不在新闻里。",
+      "duration": 18.0,
+      "visual_type": "concept",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 6,
+      "visual_description": "复古的晴雨表（天气计）特写，随后镜头旋转并变形，金属部件重组，变成一台现代医学CT扫描仪。",
+      "search_keywords": [
+        "晴雨表",
+        "CT机",
+        "barometer",
+        "CT scanner"
+      ],
+      "on_screen_text": "这就是为什么，\"股市是经济的晴雨表\"这句话，在2026年已经太粗糙了。晴雨表只能告诉你下不下雨。而今天的A股，更像一台CT机。",
+      "duration": 15.0,
+      "visual_type": "concept",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 7,
+      "visual_description": "医疗室场景，医生指着CT胶片，胶片上的图像清晰分层，展示不同组织的密度差异。",
+      "search_keywords": [
+        "CT扫描",
+        "医学诊断",
+        "medical scan",
+        "diagnosis"
+      ],
+      "on_screen_text": "CT机的价值在于分层。平扫能看到轮廓，增强扫描才能看到密度差——哪里在长骨头，哪里在坏死。",
+      "duration": 12.0,
+      "visual_type": "diagram",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 8,
+      "visual_description": "数据可视化界面：平扫结果显示平稳的营收和净利数据，随后增强扫描模式启动，高亮显示各板块巨大的增速差异，颜色由灰转红。",
+      "search_keywords": [
+        "数据可视化",
+        "财报分析",
+        "data visualization",
+        "financial report"
+      ],
+      "on_screen_text": "A股这份三季报，平扫结果是：56.7万亿元营收、5.1万亿元净利、73%的公司实现盈利... 但真正的信息，全在增强扫描里。",
+      "duration": 15.0,
+      "visual_type": "data_visual",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 9,
+      "visual_description": "微观视角：造影剂在血管或电路板中流动，照亮不同分支，隐喻利润流向不同板块的巨大落差。",
+      "search_keywords": [
+        "造影剂",
+        "电路",
+        "contrast agent",
+        "circuit board"
+      ],
+      "on_screen_text": "造影剂就是增速差。同一个市场，同一个季度，不同板块的利润增速最大相差几百倍。这样的落差不可能用\"周期波动\"解释，它只能是结构断层的直接投影。",
+      "duration": 15.0,
+      "visual_type": "concept",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 10,
+      "visual_description": "科创板图表，数字474.6%巨大且醒目，随后出现长鑫科技的公司标志或芯片图像，旁边小字标注剔除后的106.9%。",
+      "search_keywords": [
+        "科创板",
+        "芯片",
+        "STAR Market",
+        "semiconductor"
+      ],
+      "on_screen_text": "前三季度，科创板净利润同比增长474.6%... 但剔除它，科创板增速仍然高达106.9%。",
+      "duration": 14.0,
+      "visual_type": "data_visual",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 11,
+      "visual_description": "对比画面：左侧是银行、石油、基建的灰色静止建筑，数字显示1.1%；右侧是AI产业链的明亮光效，数字显示281%。",
+      "search_keywords": [
+        "传统行业",
+        "AI产业",
+        "traditional industry",
+        "AI industry"
+      ],
+      "on_screen_text": "创业板净利润增长22.7%。而沪市主板，只有1.1%... 真正的增量在哪里？在AI产业链的报表里。",
+      "duration": 12.0,
+      "visual_type": "landscape",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 12,
+      "visual_description": "工厂流水线，电子元件和有色金属矿石并列，分别标注真实的资本开支（订单堆积）和价格上涨（PPI回升）。",
+      "search_keywords": [
+        "电子元件",
+        "有色金属",
+        "electronics",
+        "non-ferrous metals"
+      ],
+      "on_screen_text": "电子的增长来自真实的资本开支... 而有色的增长，更多来自价格... 新大陆上有两种矿：一种是技术，一种是价格。",
+      "duration": 15.0,
+      "visual_type": "concept",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 13,
+      "visual_description": "黑暗的隧道，尽头有微弱的光，周围是房地产工地的废墟或停工景象，光伏板堆叠在阴影中。",
+      "search_keywords": [
+        "房地产亏损",
+        "光伏产能",
+        "real estate loss",
+        "solar energy"
+      ],
+      "on_screen_text": "旧动能的\"漫长隧道\"... 房地产行业整体仍在亏损... 光伏设备仍在产能消化的隧道里。",
+      "duration": 12.0,
+      "visual_type": "landscape",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 14,
+      "visual_description": "银行大楼内部，贷款文件堆积如山，但增长缓慢；切换至高科技公司，正在发行股票或债券，充满活力。",
+      "search_keywords": [
+        "银行贷款",
+        "股权融资",
+        "bank loan",
+        "equity financing"
+      ],
+      "on_screen_text": "信贷密度越高的行业，信用扩张对利润的边际拉动越弱... 一家钢厂要扩张，去银行抵押土地；一家芯片公司要扩张，去科创板发股票。",
+      "duration": 16.0,
+      "visual_type": "diagram",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 15,
+      "visual_description": "巨大的金色硬币（代表分红回购）从上市公司流向散户，体积明显大于红色的融资漏斗。字幕显示2.1万亿 vs 融资额。",
+      "search_keywords": [
+        "股票分红",
+        "资金流向",
+        "stock dividend",
+        "cash flow"
+      ],
+      "on_screen_text": "上市公司给股东的钱，超过了从市场拿走的钱。年内A股分红回购合计2.1万亿元，是同期IPO融资和再融资规模的2.7倍。",
+      "duration": 15.0,
+      "visual_type": "data_visual",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 16,
+      "visual_description": "社保、保险等机构资金的图标（如盾牌、房子）向股市注入绿色箭头，背景是稳健的上升趋势。",
+      "search_keywords": [
+        "社保基金",
+        "长期资金",
+        "social security fund",
+        "long-term capital"
+      ],
+      "on_screen_text": "社保、保险、年金等中长期资金年初以来净买入A股超过6000亿元... A股正在从\"融资市\"变成\"投资市\"。",
+      "duration": 14.0,
+      "visual_type": "concept",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 17,
+      "visual_description": "全球地图，从中国发出的光束指向世界各地，光束上标注“中间品”、“能力”，而非“成品”。",
+      "search_keywords": [
+        "全球供应链",
+        "出海",
+        "global supply chain",
+        "going global"
+      ],
+      "on_screen_text": "海外比国内更赚钱... 中国制造正在从\"卖成品\"变成\"卖能力\"。",
+      "duration": 12.0,
+      "visual_type": "landscape",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 18,
+      "visual_description": "中际旭创的服务器机房连接着微软、谷歌等Logo，数据流代表全球AI资本开支。",
+      "search_keywords": [
+        "全球AI",
+        "科技巨头",
+        "global AI",
+        "tech giants"
+      ],
+      "on_screen_text": "中际旭创的利润表，本质上是中国工厂在为全球AI资本开支代工——它的客户名单里，是微软、谷歌、Meta。",
+      "duration": 14.0,
+      "visual_type": "event",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 19,
+      "visual_description": "分裂画面：上方是企业订单排到明年（忙碌的车间），下方是居民银行账户亏损或犹豫的面孔（冷漠/焦虑）。",
+      "search_keywords": [
+        "企业订单",
+        "居民感受",
+        "corporate orders",
+        "retail investor"
+      ],
+      "on_screen_text": "企业说订单排到明年，股民说账户还在亏钱，打工人说年终奖没涨。三个\"体感\"都是真的，因为它们在三个不同的层面上。",
+      "duration": 15.0,
+      "visual_type": "concept",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 20,
+      "visual_description": "居民手持存折或信用卡，背景是缓慢上升的房价曲线被压平，人们在偿还贷款（箭头向下指向钱包）。",
+      "search_keywords": [
+        "居民还债",
+        "资产负债表",
+        "household debt",
+        "balance sheet"
+      ],
+      "on_screen_text": "居民还在修资产负债表... 一个正在还债的部门，不会因为指数涨了两百点就改变行为。",
+      "duration": 12.0,
+      "visual_type": "portrait",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 21,
+      "visual_description": "政策文件上的文字“内在稳定性”被放大，背景是平稳的指数波形，没有剧烈的尖峰。",
+      "search_keywords": [
+        "政策文件",
+        "市场稳定",
+        "policy document",
+        "market stability"
+      ],
+      "on_screen_text": "证监会的表态是\"完善稳市机制，增强股市内在稳定性\"... 它们不制造上涨，它们降低下跌的烈度。",
+      "duration": 14.0,
+      "visual_type": "text_animation",
+      "needs_effect": false
+    },
+    {
+      "scene_id": 22,
+      "visual_description": "画面左右分屏：左侧是过去的“放水”（水龙头大开，泡沫多，指数虚高），右侧是未来的“赚钱”（工厂生产，硬币落入口袋，指数扎实）。",
+      "search_keywords": [
+        "流动性",
+        "盈利能力",
+        "liquidity",
+        "profitability"
+      ],
+      "on_screen_text": "翻译成人话：过去的牛市靠放水，未来的牛市要靠赚钱。",
+      "duration": 8.0,
+      "visual_type": "concept",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 23,
+      "visual_description": "宏观视角：中国全景，GDP数字107.1万亿如基石般稳固，但画面逐渐微观化，聚焦到芯片和光模块的特写。",
+      "search_keywords": [
+        "中国全景",
+        "芯片特写",
+        "China landscape",
+        "chip closeup"
+      ],
+      "on_screen_text": "GDP告诉你中国有多大... 但GDP是一个平均数，而平均数天生会掩盖结构。",
+      "duration": 15.0,
+      "visual_type": "landscape",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 24,
+      "visual_description": "CT诊断书出现，上面写着八个大字，随后画面变成人体骨骼X光，新骨（高科技）在生长，旧伤（传统行业）在愈合中但仍有阴影。",
+      "search_keywords": [
+        "X光",
+        "骨骼",
+        "X-ray",
+        "skeleton"
+      ],
+      "on_screen_text": "CT机的诊断书上只写了八个字：新骨已生，旧伤未愈。",
+      "duration": 10.0,
+      "visual_type": "diagram",
+      "needs_effect": true
+    },
+    {
+      "scene_id": 25,
+      "visual_description": "身体重心从一侧（旧骨架）向另一侧（新骨架）转移，最终站在新骨架上，背景是2026年的城市天际线。",
+      "search_keywords": [
+        "重心转移",
+        "城市天际线",
+        "balance shift",
+        "city skyline"
+      ],
+      "on_screen_text": "而身体的重量，正在向新的骨架转移。这大概是2026年，关于中国经济最诚实的一句话。",
+      "duration": 12.0,
+      "visual_type": "landscape",
+      "needs_effect": true
+    }
+  ]
+}
