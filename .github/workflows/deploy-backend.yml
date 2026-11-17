@@ -36,6 +36,10 @@ jobs:
           npm install
           npm run build
 
+      - name: 生成 index.html 嵌入文件
+        working-directory: backend
+        run: node generate-index-html.js
+
       - name: 执行数据库迁移
         working-directory: backend
         run: npx wrangler d1 execute pexel-remotion-db --file=./src/database/schema.sql --remote

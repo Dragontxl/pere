@@ -11,6 +11,7 @@ import { loggerMiddleware } from './middleware/logger';
 import { errorHandler } from './middleware/error';
 import { scheduled } from './scheduled';
 import { Bindings } from './types/env';
+import { INDEX_HTML } from './index-html';
 
 const app = new Hono<{ Bindings: Bindings }>();
 
@@ -54,20 +55,34 @@ app.route('/api/v1/files', publicFileRoutes);
 app.use('/api/v1/admin/*', authMiddleware);
 app.route('/api/v1/admin', adminRoutes);
 
-// 404 handler — serve static assets for non-API paths (SPA fallback)
-app.notFound((c) => {
+// Catch-all: serve static assets for non-API paths (SPA routing with index.html fallback)
+app.get('*', async (c) => {
   const url = new URL(c.req.url);
 
-  // API paths return JSON 404
-  if (url.pathname.startsWith('/api/') || url.pathname === '/health') {
+  // API paths should return JSON 404, not index.html
+  if (url.pathname.startsWith('/api/')) {
     return c.json({ code: 404, msg: 'Not Found' }, 404);
   }
 
-  // Non-API paths: delegate to assets binding (serves files or SPA index.html)
+  // Try ASSETS binding first (available in newer wrangler versions)
   if (c.env.ASSETS) {
-    return c.env.ASSETS.fetch(c.req.raw);
+    try {
+      // Try to serve the requested file
+      const fileResponse = await c.env.ASSETS.fetch(c.req.raw);
+      if (fileResponse && fileResponse.status === 200) {
+        return fileResponse;
+      }
+    } catch (e) {
+      // File not found, fall through to SPA fallback
+    }
   }
 
+  // SPA fallback: serve embedded index.html for client-side routes
+  return c.html(INDEX_HTML);
+});
+
+// 404 handler for non-GET requests on non-API paths
+app.notFound((c) => {
   return c.json({ code: 404, msg: 'Not Found' }, 404);
 });
 

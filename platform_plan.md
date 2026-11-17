@@ -8,11 +8,21 @@
 ## 一、需求拆解
 
 > **阶段进度**：
-> - ✅ 阶段一：GitHub 仓库创建与脱敏推送（54 文件 → 75 文件）
+> - ✅ 阶段一：GitHub 仓库创建与脱敏推送（54 文件 → 96 文件）
 > - ✅ 阶段二：后端 API 开发（Cloudflare Workers，20 文件）
 > - ✅ 阶段三：GitHub Actions Workflow 改造 + main.py CI 集成
-> - 🔄 阶段四：前端开发（进行中）
-> - ⏳ 阶段五：部署与集成验证
+> - ✅ 阶段四：前端开发（React + Vite + TypeScript，18 文件）
+> - ✅ 阶段五：部署与集成（Worker 已部署，D1/R2 已配置，前端已上线）
+>
+> **部署状态**：
+> - Worker `pexel-remotion-worker` 已部署，自定义域名 `pere.ygtxl.dpdns.org` 已绑定
+> - Worker 同时提供 API（`/api/*`）和前端静态资源（assets + SPA 路由）
+> - D1 数据库 `pexel-remotion-db` 已创建并执行 schema 迁移（6 张表）
+> - R2 桶 `pexel-remotion-bucket` 已创建
+> - API 登录验证通过（admin / admin123）
+> - 前端页面验证通过（https://pere.ygtxl.dpdns.org）
+> - GitHub Actions Secrets 需用户手动配置（见 DEPLOYMENT.md）
+> - R2 Access Keys 需用户在 Cloudflare Dashboard 手动创建
 
 | 编号 | 需求 | 说明 |
 |---|---|---|

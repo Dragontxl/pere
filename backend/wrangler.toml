@@ -37,7 +37,7 @@ not_found_handling = "single-page-application"
 [env.production.triggers]
 # crons removed - Workers Free tier limit reached (5 per account)
 
-[env.production.routes]
+[[env.production.routes]]
 pattern = "pere.ygtxl.dpdns.org"
 zone_name = "ygtxl.dpdns.org"
 custom_domain = true

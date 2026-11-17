@@ -6,7 +6,8 @@
   "main": "src/index.ts",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "gen:html": "node generate-index-html.js",
+    "deploy": "node generate-index-html.js && wrangler deploy",
     "db:migrate": "wrangler d1 execute pexel-remotion-db --file=./src/database/schema.sql",
     "db:local": "wrangler d1 execute DB --local --file=./src/database/schema.sql"
   },
