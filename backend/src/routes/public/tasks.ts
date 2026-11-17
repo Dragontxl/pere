@@ -3,7 +3,12 @@ import { TaskService } from '../../services/TaskService';
 import { Bindings } from '../../types/env';
 import { authMiddleware } from '../../middleware/auth';
 
-const taskRoutes = new Hono();
+type Variables = {
+  userId: string;
+  role: string;
+};
+
+const taskRoutes = new Hono<{ Variables: Variables }>();
 
 // All task routes require authentication
 taskRoutes.use('*', authMiddleware);
