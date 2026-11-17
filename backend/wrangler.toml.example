@@ -1,0 +1,66 @@
+# Cloudflare Workers configuration for pexel-remotion backend
+# Copy this file to wrangler.toml and fill in your actual values
+
+name = "pexel-remotion-worker"
+main = "src/index.ts"
+compatibility_date = "2024-05-29"
+compatibility_flags = ["nodejs_compat"]
+
+[env.production]
+name = "pexel-remotion-worker"
+main = "src/index.ts"
+
+[env.production.vars]
+ADMIN_API_KEY = "${ADMIN_API_KEY}"
+CALLBACK_SECRET = "${CALLBACK_SECRET}"
+JWT_SECRET = "${JWT_SECRET}"
+ENCRYPTION_KEY = "${ENCRYPTION_KEY}"
+ENVIRONMENT = "production"
+GITHUB_REPO_OWNER = "Dragontxl"
+GITHUB_REPO_NAME = "pere"
+FRONTEND_URL = "${FRONTEND_URL}"
+R2_PUBLIC_URL = "${R2_PUBLIC_URL}"
+CLOUDFLARE_API_TOKEN = "${CLOUDFLARE_API_TOKEN}"
+CLOUDFLARE_ZONE_ID = "a591cd553ec34768475ee2010d4cd7ab"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "pexel-remotion-db"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+[[env.production.r2_buckets]]
+binding = "R2"
+bucket_name = "pexel-remotion-bucket"
+
+[env.production.triggers]
+crons = ["*/5 * * * *", "*/30 * * * *", "0 0 * * *"]
+
+[vars]
+ADMIN_API_KEY = "${ADMIN_API_KEY}"
+CALLBACK_SECRET = "${CALLBACK_SECRET}"
+JWT_SECRET = "${JWT_SECRET}"
+ENCRYPTION_KEY = "${ENCRYPTION_KEY}"
+ENVIRONMENT = "production"
+GITHUB_REPO_OWNER = "Dragontxl"
+GITHUB_REPO_NAME = "pere"
+FRONTEND_URL = "${FRONTEND_URL}"
+R2_PUBLIC_URL = "${R2_PUBLIC_URL}"
+CLOUDFLARE_API_TOKEN = "${CLOUDFLARE_API_TOKEN}"
+CLOUDFLARE_ZONE_ID = "a591cd553ec34768475ee2010d4cd7ab"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "pexel-remotion-db"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "pexel-remotion-bucket"
+
+[[routes]]
+pattern = "pere.ygtxl.dpdns.org"
+zone_name = "ygtxl.dpdns.org"
+custom_domain = true
+
+[triggers]
+crons = ["*/5 * * * *", "*/30 * * * *", "0 0 * * *"]
