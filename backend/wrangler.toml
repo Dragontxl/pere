@@ -24,7 +24,7 @@ CLOUDFLARE_ZONE_ID = "a591cd553ec34768475ee2010d4cd7ab"
 [[env.production.d1_databases]]
 binding = "DB"
 database_name = "pexel-remotion-db"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "f4705826-ced3-4e40-97fd-2494e68cef79"
 
 [[env.production.r2_buckets]]
 binding = "R2"
@@ -50,7 +50,7 @@ CLOUDFLARE_ZONE_ID = "a591cd553ec34768475ee2010d4cd7ab"
 [[d1_databases]]
 binding = "DB"
 database_name = "pexel-remotion-db"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "f4705826-ced3-4e40-97fd-2494e68cef79"
 
 [[r2_buckets]]
 binding = "R2"
