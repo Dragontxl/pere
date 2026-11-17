@@ -345,6 +345,8 @@ def send_callback(
             headers={
                 "Content-Type": "application/json",
                 "X-Callback-Signature": signature_b64,
+                # Cloudflare blocks the default urllib User-Agent (Error 1010)
+                "User-Agent": "pexel-remotion-pipeline/1.0",
             },
             method="POST",
         )
@@ -391,12 +393,12 @@ def upload_to_r2(
         return False
 
     try:
-        # 使用 wrangler CLI 上传到 R2（R2 兼容 S3 API）
+        # 使用 wrangler CLI 上传到 R2（wrangler 4 语法：对象路径用位置参数）
         result = subprocess.run(
-            ["npx", "wrangler", "r2", "object", "put",
-             "--bucket", r2_bucket,
-             "--key", r2_key,
-             "--file", local_path],
+            ["npx", "--yes", "wrangler", "r2", "object", "put",
+             f"{r2_bucket}/{r2_key}",
+             "--file", local_path,
+             "--remote"],
             capture_output=True,
             text=True,
             timeout=300,
@@ -473,12 +475,12 @@ def load_phase_artifact(
             access_key = r2_config["access_key_id"]
             secret_key = r2_config["secret_access_key"]
 
-            # 使用 wrangler CLI 下载
+            # 使用 wrangler CLI 下载（wrangler 4 语法：对象路径用位置参数）
             result = subprocess.run(
-                ["npx", "wrangler", "r2", "object", "get",
-                 "--bucket", bucket,
-                 "--key", r2_key,
-                 "--destination", str(local_path)],
+                ["npx", "--yes", "wrangler", "r2", "object", "get",
+                 f"{bucket}/{r2_key}",
+                 "--file", str(local_path),
+                 "--remote"],
                 capture_output=True,
                 text=True,
                 timeout=120,

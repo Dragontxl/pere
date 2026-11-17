@@ -57,3 +57,4 @@ credentials.json
 push_api.ps1
 *.local.ps1
 npm_install.log
+_commit_msg.txt

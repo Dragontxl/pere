@@ -170,12 +170,14 @@ jobs:
       - name: 下载文章文件（R2）
         if: ${{ env.ARTICLE_FILE_KEY != '' }}
         shell: pwsh
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          # 使用 wrangler R2 客户端下载文章文件
-          npx wrangler r2 object get `
-            --bucket ${{ secrets.R2_BUCKET_NAME }} `
-            --key ${{ env.ARTICLE_FILE_KEY }} `
-            --destination article_download.txt 2>&1
+          # wrangler 4 语法：对象路径是位置参数
+          npx --yes wrangler r2 object get `
+            "${{ secrets.R2_BUCKET_NAME }}/${{ env.ARTICLE_FILE_KEY }}" `
+            --file article_download.txt --remote 2>&1
 
           if (Test-Path article_download.txt) {
             Copy-Item article_download.txt article.txt -Force
@@ -289,17 +291,19 @@ jobs:
 
       - name: 上传中间产物到 R2
         if: ${{ always() && steps.generate.outcome == 'success' }}
+        continue-on-error: true
         shell: pwsh
         env:
           R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           # 上传 scenes.json、match_results.json、decisions.json、final_output.mp4 到 R2
           $prefix = "tasks/$env:TASK_ID"
 
-          # 使用 wrangler r2 上传文件
           $filesToUpload = @(
             "output/scenes.json",
             "output/match_results.json",
@@ -310,12 +314,10 @@ jobs:
           foreach ($file in $filesToUpload) {
             if (Test-Path $file) {
               $r2Key = "$prefix/$([System.IO.Path]::GetFileName($file))"
-              Write-Host "Uploading $file → $r2Key"
+              Write-Host "Uploading $file -> $r2Key"
 
-              npx wrangler r2 object put `
-                --bucket $env:R2_BUCKET_NAME `
-                --key $r2Key `
-                --file $file 2>&1
+              # wrangler 4 语法：对象路径是位置参数（不是 --bucket/--key）
+              npx --yes wrangler r2 object put "$env:R2_BUCKET_NAME/$r2Key" --file $file --remote 2>&1
 
               if ($LASTEXITCODE -ne 0) {
                 Write-Warning "Failed to upload $file to R2 (continuing)"
@@ -331,10 +333,12 @@ jobs:
         env:
           CALLBACK_URL: ${{ secrets.CALLBACK_URL }}
           CALLBACK_SECRET: ${{ secrets.CALLBACK_SECRET }}
+          JOB_STATUS: ${{ job.status }}
         run: |
           $secret = $env:CALLBACK_SECRET
           $phase = $env:END_PHASE
-          $status = if ($env:GITHUB_RUN_RESULT -eq 'success') { 'completed' } else { 'failed' }
+          # GitHub 没有 GITHUB_RUN_RESULT 这个变量，job.status 才是当前作业状态
+          $status = if ($env:JOB_STATUS -eq 'success') { 'completed' } else { 'failed' }
           $message = "Phase $phase $status"
 
           $payload = @{
