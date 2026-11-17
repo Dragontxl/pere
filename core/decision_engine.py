@@ -17,6 +17,16 @@ class SceneDecision:
     match_score: float = 0.0
     reason: str = ""
 
+    @classmethod
+    def from_dict(cls, d: dict) -> "SceneDecision":
+        return cls(
+            scene_id=d["scene_id"],
+            implementation=d["implementation"],
+            asset_path=d.get("asset_path"),
+            match_score=d.get("match_score", 0.0),
+            reason=d.get("reason", ""),
+        )
+
 
 def decide_scenes(
     scenes: List,

@@ -9,6 +9,8 @@
 """
 
 import argparse
+import base64
+import hashlib
 import json
 import os
 import shutil
@@ -185,6 +187,76 @@ def parse_args():
         default=None,
         help="修改指定场景的视觉类型，格式 scene_id:type，可重复。如 --rerender-type 8:data_visual"
     )
+    # CI / 平台集成参数
+    parser.add_argument(
+        "--task-id",
+        type=str,
+        default=None,
+        help="任务ID（CI 模式，用于回调和 R2 存储路径）"
+    )
+    parser.add_argument(
+        "--article-source",
+        type=str,
+        choices=["ai_generated", "pasted", "uploaded"],
+        default=None,
+        help="文章来源：ai_generated / pasted / uploaded"
+    )
+    parser.add_argument(
+        "--start-phase",
+        type=str,
+        choices=["SCENE_GEN", "ASSET_MATCH", "REMOTION_RENDER", "TTS_COMPOSE"],
+        default=None,
+        help="起始阶段（CI 模式，控制从哪个环节开始执行）"
+    )
+    parser.add_argument(
+        "--end-phase",
+        type=str,
+        choices=["SCENE_GEN", "ASSET_MATCH", "REMOTION_RENDER", "TTS_COMPOSE"],
+        default=None,
+        help="结束阶段（CI 模式，控制执行到哪个环节）"
+    )
+    parser.add_argument(
+        "--callback-url",
+        type=str,
+        default=None,
+        help="回调通知地址（CI 模式，阶段进度/完成/失败时 POST 通知）"
+    )
+    parser.add_argument(
+        "--callback-secret",
+        type=str,
+        default=None,
+        help="回调签名密钥（与后端 CALLBACK_SECRET 一致，用于 HMAC-SHA256 签名）"
+    )
+    parser.add_argument(
+        "--r2-prefix",
+        type=str,
+        default=None,
+        help="R2 存储前缀（CI 模式，中间产物和最终视频的 R2 路径前缀）"
+    )
+    parser.add_argument(
+        "--r2-bucket",
+        type=str,
+        default=None,
+        help="R2 桶名称（CI 模式，上传中间产物时使用）"
+    )
+    parser.add_argument(
+        "--r2-access-key-id",
+        type=str,
+        default=None,
+        help="R2 Access Key ID"
+    )
+    parser.add_argument(
+        "--r2-secret-access-key",
+        type=str,
+        default=None,
+        help="R2 Secret Access Key"
+    )
+    parser.add_argument(
+        "--r2-endpoint",
+        type=str,
+        default=None,
+        help="R2 Endpoint URL"
+    )
     return parser.parse_args()
 
 
@@ -215,9 +287,211 @@ def setup_environment(config: dict, render_params: dict) -> tuple:
     work_dir.mkdir(parents=True, exist_ok=True)
 
     temp_dir = work_dir / "temp"
-    temp_dir.mkdir(parents=True, exist_ok=True)
+    temp_dir.mkdir(parents=True, exist=True)
 
     return work_dir, temp_dir
+
+
+# ── CI 回调与 R2 上传 ──────────────────────────────────────────────────
+
+_PHASE_ORDER = ["SCENE_GEN", "ASSET_MATCH", "REMOTION_RENDER", "TTS_COMPOSE"]
+
+
+def get_phase_range(start_phase: str | None, end_phase: str | None) -> tuple[int, int]:
+    """返回 (start_idx, end_idx)，覆盖从 SCENE_GEN 到 TTS_COMPOSE"""
+    start = _PHASE_ORDER.index(start_phase) if start_phase and start_phase in _PHASE_ORDER else 0
+    end = _PHASE_ORDER.index(end_phase) if end_phase and end_phase in _PHASE_ORDER else 3
+    if end < start:
+        end = start
+    return start, end
+
+
+def send_callback(
+    payload: dict,
+    callback_url: str | None,
+    callback_secret: str | None,
+) -> bool:
+    """向后端发送 HMAC-SHA256 签名的回调通知
+
+    Args:
+        payload: 回调数据（task_id、phase、status 等）
+        callback_url: 后端回调地址
+        callback_secret: HMAC 签名密钥
+
+    Returns:
+        是否成功发送
+    """
+    if not callback_url or not callback_secret:
+        return False
+
+    try:
+        import hmac
+        import hashlib
+        import urllib.request
+
+        body = json.dumps(payload, ensure_ascii=False)
+        body_bytes = body.encode("utf-8")
+
+        signature = hmac.new(
+            callback_secret.encode("utf-8"),
+            body_bytes,
+            hashlib.sha256,
+        ).digest()
+        signature_b64 = base64.b64encode(signature).decode("ascii")
+
+        req = urllib.request.Request(
+            callback_url,
+            data=body_bytes,
+            headers={
+                "Content-Type": "application/json",
+                "X-Callback-Signature": signature_b64,
+            },
+            method="POST",
+        )
+
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            if 200 <= resp.status < 300:
+                print(f"  📡 回调已发送: {body}")
+                return True
+            else:
+                print(f"  ⚠️ 回调非2xx响应: {resp.status}")
+                return False
+    except Exception as e:
+        print(f"  ⚠️ 回调发送失败: {e}")
+        return False
+
+
+def upload_to_r2(
+    local_path: str,
+    r2_key: str,
+    r2_bucket: str | None,
+    r2_access_key_id: str | None,
+    r2_secret_access_key: str | None,
+    r2_endpoint: str | None,
+) -> bool:
+    """将本地文件上传到 R2（使用 wrangler CLI）
+
+    Args:
+        local_path: 本地文件路径
+        r2_key: R2 对象键
+        r2_bucket: R2 桶名
+        r2_access_key_id: Access Key ID
+        r2_secret_access_key: Secret Access Key
+        r2_endpoint: R2 Endpoint URL
+
+    Returns:
+        是否成功
+    """
+    if not (r2_bucket and r2_access_key_id and r2_secret_access_key and r2_endpoint):
+        print(f"  ⚠️ R2 配置不完整，跳过上传: {local_path}")
+        return False
+
+    if not os.path.exists(local_path):
+        print(f"  ⚠️ 文件不存在，跳过上传: {local_path}")
+        return False
+
+    try:
+        # 使用 wrangler CLI 上传到 R2（R2 兼容 S3 API）
+        result = subprocess.run(
+            ["npx", "wrangler", "r2", "object", "put",
+             "--bucket", r2_bucket,
+             "--key", r2_key,
+             "--file", local_path],
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        if result.returncode == 0:
+            print(f"  📤 R2 上传成功: {r2_key}")
+            return True
+        else:
+            print(f"  ⚠️ wrangler r2 put 失败: {result.stderr}")
+            return False
+    except FileNotFoundError:
+        print(f"  ⚠️ wrangler CLI 不可用，跳过 R2 上传: {local_path}")
+        return False
+    except Exception as e:
+        print(f"  ⚠️ R2 上传失败 {r2_key}: {e}")
+        return False
+
+
+def save_phase_artifact(
+    artifact_path: str,
+    task_id: str | None,
+    r2_prefix: str | None,
+    r2_config: dict | None,
+) -> bool:
+    """保存阶段产物到 R2（如果配置了 R2）"""
+    if not task_id or not r2_prefix or not r2_config:
+        return False
+
+    if not os.path.exists(artifact_path):
+        return False
+
+    filename = os.path.basename(artifact_path)
+    r2_key = f"{r2_prefix}/{filename}"
+    return upload_to_r2(
+        artifact_path, r2_key,
+        r2_config.get("bucket"),
+        r2_config.get("access_key_id"),
+        r2_config.get("secret_access_key"),
+        r2_config.get("endpoint"),
+    )
+
+
+def load_phase_artifact(
+    artifact_name: str,
+    work_dir: Path,
+    task_id: str | None,
+    r2_prefix: str | None,
+    r2_config: dict | None,
+) -> Path | None:
+    """加载阶段产物：优先从本地 work_dir 读取，如果不存在则从 R2 下载
+
+    Args:
+        artifact_name: 产物文件名（如 scenes.json）
+        work_dir: 本地工作目录
+        task_id: 任务ID
+        r2_prefix: R2 前缀
+        r2_config: R2 配置
+
+    Returns:
+        本地文件路径，或 None（如果无法获取）
+    """
+    local_path = work_dir / artifact_name
+    if local_path.exists():
+        return local_path
+
+    # 尝试从 R2 下载
+    if task_id and r2_prefix and r2_config:
+        try:
+            r2_key = f"{r2_prefix}/{artifact_name}"
+            import urllib.request
+
+            endpoint = r2_config["endpoint"].rstrip("/")
+            bucket = r2_config["bucket"]
+            access_key = r2_config["access_key_id"]
+            secret_key = r2_config["secret_access_key"]
+
+            # 使用 wrangler CLI 下载
+            result = subprocess.run(
+                ["npx", "wrangler", "r2", "object", "get",
+                 "--bucket", bucket,
+                 "--key", r2_key,
+                 "--destination", str(local_path)],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if result.returncode == 0 and local_path.exists():
+                print(f"  📥 从 R2 下载产物: {r2_key}")
+                return local_path
+            else:
+                print(f"  ⚠️ R2 下载失败: {r2_key} - {result.stderr}")
+        except Exception as e:
+            print(f"  ⚠️ R2 下载异常: {e}")
+
+    return None
 
 
 def get_article(client, config: dict, model: str) -> str:
@@ -1399,102 +1673,278 @@ def main():
         return
 
     try:
-        # 环节1：获取文章
-        print("\n[1/6] 获取文章...")
-        article = get_article(client, config, model)
-        if not article or not article.strip():
-            print("❌ 未获取到文章内容")
-            sys.exit(1)
-        print(f"✅ 文章已获取，共 {len(article)} 字")
+        # ── CI 平台集成 ───────────────────────────────────────────────
+        start_idx, end_idx = get_phase_range(args.start_phase, args.end_phase)
+        start_phase_name = _PHASE_ORDER[start_idx]
+        end_phase_name = _PHASE_ORDER[end_idx]
 
-        # 保存文章
-        article_path = work_dir / "article.txt"
-        with open(article_path, "w", encoding="utf-8") as f:
-            f.write(article)
+        r2_config = None
+        if args.r2_bucket and args.r2_access_key_id and args.r2_secret_access_key and args.r2_endpoint:
+            r2_config = {
+                "bucket": args.r2_bucket,
+                "access_key_id": args.r2_access_key_id,
+                "secret_access_key": args.r2_secret_access_key,
+                "endpoint": args.r2_endpoint,
+            }
 
-        # 环节2：文章切块 + LLM 分镜
-        # 先把文章切成 30-50 字的解说片段（≈6-10 秒语音），
-        # 再由 LLM 只负责画面描述/检索词/镜头类型——片段数量由文章长度决定，
-        # 不会被 LLM 自由发挥影响（曾出现 6210 字只切 8 个镜头的情况）。
-        print("\n[2/6] 切分文章并生成分镜...")
-        chunks = split_into_chunks(article)
-        if not chunks:
-            print("❌ 文章切块失败，内容为空")
-            sys.exit(1)
-        total_chars = sum(len(c) for c in chunks)
-        print(f"✅ 文章切成 {len(chunks)} 个解说片段"
-              f"（约 {total_chars} 字，预计 {total_chars / 5.2 / 60:.1f} 分钟）")
-
-        scenes = generate_scenes_from_chunks(chunks, client, model)
-        print(f"✅ 生成 {len(scenes)} 个镜头")
-
-        # 保存分镜
-        scenes_path = work_dir / "scenes.json"
-        with open(scenes_path, "w", encoding="utf-8") as f:
-            json.dump(
-                {"scenes": [s.to_dict() for s in scenes]},
-                f, ensure_ascii=False, indent=2
+        def _cb_progress(phase: str, message: str, processed: int = 0, total: int = 0):
+            send_callback(
+                {
+                    "task_id": args.task_id,
+                    "phase": phase,
+                    "status": "processing",
+                    "message": message,
+                    "processed_count": processed,
+                    "total_count": total,
+                },
+                args.callback_url,
+                args.callback_secret,
             )
 
-        # 环节3：素材下载与匹配
-        print("\n[3/6] 下载并匹配图片素材...")
-        match_results = download_and_match(
-            scenes, zhipu_client, config, temp_dir, work_dir
-        )
-
-        # 保存匹配结果
-        match_path = work_dir / "match_results.json"
-        with open(match_path, "w", encoding="utf-8") as f:
-            json.dump(match_results, f, ensure_ascii=False, indent=2)
-
-        # 环节4：Remotion 适用性分析
-        print("\n[4/6] 分析 Remotion 适用性...")
-        remotion_decisions = analyze_scenes(scenes)
-        remotion_count = sum(1 for d in remotion_decisions if d.use_remotion)
-        print(f"✅ {remotion_count} 个镜头适合 Remotion，{len(scenes) - remotion_count} 个使用图片")
-
-        # 环节5：综合决策
-        print("\n[5/6] 综合决策...")
-        score_threshold = config.get("match_score_threshold", 0.25)
-        decisions = decide_scenes(scenes, match_results, remotion_decisions, score_threshold)
-
-        for dec in decisions:
-            print(f"  镜头 {dec.scene_id}: {dec.implementation} — {dec.reason}")
-
-        # 保存决策
-        decisions_path = work_dir / "decisions.json"
-        with open(decisions_path, "w", encoding="utf-8") as f:
-            json.dump(
-                [{
-                    "scene_id": d.scene_id,
-                    "implementation": d.implementation,
-                    "asset_path": d.asset_path,
-                    "match_score": d.match_score,
-                    "reason": d.reason
-                } for d in decisions],
-                f, ensure_ascii=False, indent=2
+        def _cb_phase_done(phase: str):
+            send_callback(
+                {
+                    "task_id": args.task_id,
+                    "phase": phase,
+                    "status": "completed",
+                    "message": f"Phase {phase} completed",
+                    "processed_count": 1,
+                    "total_count": 1,
+                },
+                args.callback_url,
+                args.callback_secret,
             )
 
-        # 环节6：合成视频
-        print("\n[6/6] 合成视频...")
-        final_output = compose_video(
-            scenes, decisions, match_results,
-            config, render_params, work_dir
-        )
+        print(f"\n📋 执行阶段: {start_phase_name} → {end_phase_name} ({start_idx}-{end_idx})")
+        if args.task_id:
+            print(f"🆔 任务ID: {args.task_id}")
+        if r2_config:
+            print(f"☁️ R2 存储: {args.r2_prefix}")
+
+        # ══════════════════════════════════════════════════════════════
+        # Phase 0: SCENE_GEN — 文章 → 分镜
+        # ══════════════════════════════════════════════════════════════
+        scenes = None
+        if start_idx <= 0:
+            _cb_progress(start_phase_name, "开始生成文章和分镜")
+            # 环节1：获取文章
+            print("\n[1/6] 获取文章...")
+            if args.article_file:
+                article = get_article_from_file(args.article_file)
+                print(f"✅ 从文件读取文章，共 {len(article)} 字")
+            elif args.article_source == "ai_generated" or args.topic:
+                topic = args.topic or "生成一篇适合视频口播的文章"
+                article = get_article_from_ai(client, topic, model)
+                print(f"✅ AI 生成文章，共 {len(article)} 字")
+            else:
+                article = get_article(client, config, model)
+                if not article or not article.strip():
+                    print("❌ 未获取到文章内容")
+                    sys.exit(1)
+                print(f"✅ 文章已获取，共 {len(article)} 字")
+
+            # 保存文章
+            article_path = work_dir / "article.txt"
+            with open(article_path, "w", encoding="utf-8") as f:
+                f.write(article)
+            save_phase_artifact(str(article_path), args.task_id, args.r2_prefix, r2_config)
+
+            # 环节2：文章切块 + LLM 分镜
+            print("\n[2/6] 切分文章并生成分镜...")
+            chunks = split_into_chunks(article)
+            if not chunks:
+                print("❌ 文章切块失败，内容为空")
+                sys.exit(1)
+            total_chars = sum(len(c) for c in chunks)
+            print(f"✅ 文章切成 {len(chunks)} 个解说片段"
+                  f"（约 {total_chars} 字，预计 {total_chars / 5.2 / 60:.1f} 分钟）")
+
+            scenes = generate_scenes_from_chunks(chunks, client, model)
+            print(f"✅ 生成 {len(scenes)} 个镜头")
+
+            # 保存分镜
+            scenes_path = work_dir / "scenes.json"
+            with open(scenes_path, "w", encoding="utf-8") as f:
+                json.dump(
+                    {"scenes": [s.to_dict() for s in scenes]},
+                    f, ensure_ascii=False, indent=2
+                )
+            save_phase_artifact(str(scenes_path), args.task_id, args.r2_prefix, r2_config)
+
+            _cb_phase_done("SCENE_GEN")
+
+        else:
+            # 从 R2 或本地加载分镜
+            scenes_path = load_phase_artifact(
+                "scenes.json", work_dir, args.task_id, args.r2_prefix, r2_config
+            )
+            if scenes_path:
+                with open(scenes_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                from core.scene_generator import Scene
+                scenes = [Scene.from_dict(s) for s in data.get("scenes", [])]
+                print(f"✅ 从产物加载 {len(scenes)} 个镜头")
+            else:
+                print("❌ 无法加载 scenes.json，请确保 SCENE_GEN 阶段已完成")
+                sys.exit(1)
+
+        # ══════════════════════════════════════════════════════════════
+        # Phase 1: ASSET_MATCH — 分镜 → 素材匹配结果
+        # ══════════════════════════════════════════════════════════════
+        match_results = None
+        if start_idx <= 1:
+            _cb_progress("ASSET_MATCH", "开始下载并匹配图片素材")
+            # 环节3：素材下载与匹配
+            print("\n[3/6] 下载并匹配图片素材...")
+            match_results = download_and_match(
+                scenes, zhipu_client, config, temp_dir, work_dir
+            )
+
+            # 保存匹配结果
+            match_path = work_dir / "match_results.json"
+            with open(match_path, "w", encoding="utf-8") as f:
+                json.dump(match_results, f, ensure_ascii=False, indent=2)
+            save_phase_artifact(str(match_path), args.task_id, args.r2_prefix, r2_config)
+
+            _cb_phase_done("ASSET_MATCH")
+
+        else:
+            match_path = load_phase_artifact(
+                "match_results.json", work_dir, args.task_id, args.r2_prefix, r2_config
+            )
+            if match_path:
+                with open(match_path, "r", encoding="utf-8") as f:
+                    match_results = json.load(f)
+                print(f"✅ 从产物加载匹配结果（{len(match_results)} 个镜头）")
+            else:
+                print("❌ 无法加载 match_results.json，请确保 ASSET_MATCH 阶段已完成")
+                sys.exit(1)
+
+        # ══════════════════════════════════════════════════════════════
+        # Phase 2: REMOTION_RENDER — 匹配结果 → 综合决策
+        # ══════════════════════════════════════════════════════════════
+        decisions = None
+        if start_idx <= 2:
+            _cb_progress("REMOTION_RENDER", "开始分析 Remotion 适用性和综合决策")
+            # 环节4：Remotion 适用性分析
+            print("\n[4/6] 分析 Remotion 适用性...")
+            remotion_decisions = analyze_scenes(scenes)
+            remotion_count = sum(1 for d in remotion_decisions if d.use_remotion)
+            print(f"✅ {remotion_count} 个镜头适合 Remotion，{len(scenes) - remotion_count} 个使用图片")
+
+            # 环节5：综合决策
+            print("\n[5/6] 综合决策...")
+            score_threshold = config.get("match_score_threshold", 0.25)
+            decisions = decide_scenes(scenes, match_results, remotion_decisions, score_threshold)
+
+            for dec in decisions:
+                print(f"  镜头 {dec.scene_id}: {dec.implementation} — {dec.reason}")
+
+            # 保存决策
+            decisions_path = work_dir / "decisions.json"
+            with open(decisions_path, "w", encoding="utf-8") as f:
+                json.dump(
+                    [{
+                        "scene_id": d.scene_id,
+                        "implementation": d.implementation,
+                        "asset_path": d.asset_path,
+                        "match_score": d.match_score,
+                        "reason": d.reason
+                    } for d in decisions],
+                    f, ensure_ascii=False, indent=2
+                )
+            save_phase_artifact(str(decisions_path), args.task_id, args.r2_prefix, r2_config)
+
+            _cb_phase_done("REMOTION_RENDER")
+
+        else:
+            decisions_path = load_phase_artifact(
+                "decisions.json", work_dir, args.task_id, args.r2_prefix, r2_config
+            )
+            if decisions_path:
+                with open(decisions_path, "r", encoding="utf-8") as f:
+                    dec_data = json.load(f)
+                from core.decision_engine import SceneDecision
+                decisions = [SceneDecision.from_dict(d) for d in dec_data]
+                print(f"✅ 从产物加载 {len(decisions)} 个决策")
+            else:
+                print("❌ 无法加载 decisions.json，请确保 REMOTION_RENDER 阶段已完成")
+                sys.exit(1)
+
+        # ══════════════════════════════════════════════════════════════
+        # Phase 3: TTS_COMPOSE — 决策 → 最终视频
+        # ══════════════════════════════════════════════════════════════
+        final_output = None
+        if start_idx <= 3:
+            _cb_progress("TTS_COMPOSE", "开始合成语音和视频")
+            # 环节6：合成视频
+            print("\n[6/6] 合成视频...")
+            final_output = compose_video(
+                scenes, decisions, match_results,
+                config, render_params, work_dir
+            )
+
+            # 上传最终视频到 R2
+            if final_output and r2_config:
+                r2_video_key = f"{args.r2_prefix}/final_output.mp4"
+                upload_to_r2(
+                    final_output, r2_video_key,
+                    r2_config["bucket"],
+                    r2_config["access_key_id"],
+                    r2_config["secret_access_key"],
+                    r2_config["endpoint"],
+                )
+
+            _cb_phase_done("TTS_COMPOSE")
+
+            # 发送完成回调（含最终视频信息）
+            if final_output:
+                send_callback(
+                    {
+                        "task_id": args.task_id,
+                        "phase": "TTS_COMPOSE",
+                        "status": "completed",
+                        "message": "视频生成完成",
+                        "final_video_key": f"{args.r2_prefix}/final_output.mp4" if r2_config else "final_output.mp4",
+                        "final_video_url": f"{args.r2_prefix}/final_output.mp4" if r2_config else None,
+                    },
+                    args.callback_url,
+                    args.callback_secret,
+                )
 
         # 保留临时目录中的图片素材，供后续 --rerender-clips 重渲染使用
         # 如需清理可手动删除 temp 目录，或修改 work_dir
         print(f"\n📁 临时素材保留在 {temp_dir}（供 --rerender-clips 重渲染使用）")
 
-        print(f"\n{'=' * 60}")
-        print(f"✅ 视频生成完成！")
-        print(f"📁 输出文件: {final_output}")
-        print(f"{'=' * 60}")
+        if final_output:
+            print(f"\n{'=' * 60}")
+            print(f"✅ 视频生成完成！")
+            print(f"📁 输出文件: {final_output}")
+            print(f"{'=' * 60}")
+        elif end_idx < 3:
+            print(f"\n{'=' * 60}")
+            print(f"✅ 阶段执行完成（{end_phase_name}）")
+            print(f"📁 产物已保存到 R2/工作目录")
+            print(f"{'=' * 60}")
 
     except Exception as e:
         print(f"\n❌ 处理失败: {e}")
         import traceback
         traceback.print_exc()
+
+        # 发送错误回调
+        if args.task_id:
+            send_callback(
+                {
+                    "task_id": args.task_id,
+                    "phase": args.start_phase or "SCENE_GEN",
+                    "status": "failed",
+                    "error": str(e),
+                },
+                args.callback_url,
+                args.callback_secret,
+            )
+
         cleanup(temp_dir)
         sys.exit(1)
 

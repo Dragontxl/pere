@@ -32,6 +32,18 @@ class Scene:
             "needs_effect": self.needs_effect,
         }
 
+    @classmethod
+    def from_dict(cls, d: dict) -> "Scene":
+        return cls(
+            scene_id=d["scene_id"],
+            visual_description=d["visual_description"],
+            search_keywords=d["search_keywords"],
+            on_screen_text=d["on_screen_text"],
+            duration=d["duration"],
+            visual_type=d["visual_type"],
+            needs_effect=d["needs_effect"],
+        )
+
 
 # 视觉类型枚举
 VISUAL_TYPES = {
