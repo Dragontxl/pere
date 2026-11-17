@@ -47,10 +47,10 @@ export default function ProgressBar({ currentPhase, progress }: ProgressBarProps
               </div>
               <div className="phase-info">
                 <div className="phase-name">{phase.label}</div>
-                {isCurrent && (
+                {isCurrent && !isCompleted && (
                   <div className="phase-status">进行中</div>
                 )}
-                {isDone && !isCompleted && (
+                {isDone && (
                   <div className="phase-status">已完成</div>
                 )}
                 {isPending && (

@@ -855,5 +855,9 @@ pexel-remotion/                          # 本地目录（GitHub 仓库名：per
 | R2 secrets 写进 PowerShell 数组 | 未加引号导致 ParserError | 通过 step `env` 传参，脚本里用 `$env:XXX` |
 | deploy-backend 一直失败 | D1 迁移步骤没有 `CLOUDFLARE_API_TOKEN`；wrangler 4 要求 Node ≥ 22.12 | 迁移步骤补 token，三个 workflow 的 Node 统一为 22 |
 | `npm install` peer 冲突 | wrangler 4 peer 要求 `@cloudflare/workers-types@^5` | devDependency 升到 `^5.20261117.1` |
+| 任务跑成功但被标记 FAILED | `main.py` 向 `/callback/github` 发 `started` / `processing` / `completed`，旧 handler 只认 `status === 'success'`，进度回调全被判失败 | 回调做状态归一化：`started/processing/completed` 视为实时状态，`failed/error` 才算失败，且不回退终态任务 |
+| 阶段回调不区分「阶段进度」与「整段完成」 | workflow 进度回调没有 `start_phase/end_phase`，handler 无法区分，导致阶段一完成就触发下一阶段、阶段产物缺失 | 带 `start_phase/end_phase` 的是整段事件（走完成/推进逻辑），不带的只是 `main.py` 阶段进度（只更新进度/状态标签，不触发新 run） |
+| 单阶段串行不可行 | 图片素材只存在于当次 runner，换一次 checkout 后阶段 2/3 无素材可读 | 一次 GitHub run 跑完整管线 `SCENE_GEN → TTS_COMPOSE`，阶段进度由回调上报 |
+| 进度条末阶段显示「进行中」 | `ProgressBar` 在 `progress=100` 时把最后一个阶段判为 current，`isCurrent` 分支优先输出「进行中」 | `isCompleted` 时不再输出「进行中」，改输出「已完成」 |
 
-当前状态：Worker / D1 / R2 / GitHub Actions 均已打通，创建任务即可自动触发 `video-generation` workflow。
+当前状态：Worker / D1 / R2 / GitHub Actions 均已打通，创建任务即自动触发 `video-generation` workflow，一次 run 跑完整管线，任务详情页实时展示 4 阶段进度，最终视频落 R2 并可在线预览。
