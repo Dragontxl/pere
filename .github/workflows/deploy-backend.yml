@@ -48,11 +48,27 @@ jobs:
         working-directory: backend
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          FRONTEND_URL: ${{ secrets.FRONTEND_URL }}
+          R2_PUBLIC_URL: ${{ secrets.R2_PUBLIC_URL }}
+        run: npx wrangler deploy
+
+      # Secrets cannot live in wrangler.toml: wrangler does not expand ${VAR}
+      # placeholders, so they must be uploaded with `wrangler secret put`.
+      - name: 配置 Worker Secrets
+        working-directory: backend
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
           CALLBACK_SECRET: ${{ secrets.CALLBACK_SECRET }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
           GITHUB_PAT: ${{ secrets.GH_PAT }}
-          FRONTEND_URL: ${{ secrets.FRONTEND_URL }}
-          R2_PUBLIC_URL: ${{ secrets.R2_PUBLIC_URL }}
-        run: npx wrangler deploy
+        run: |
+          for name in ADMIN_API_KEY CALLBACK_SECRET JWT_SECRET ENCRYPTION_KEY GITHUB_PAT; do
+            value="$(printenv "$name")"
+            if [ -n "$value" ]; then
+              printf '%s' "$value" | npx wrangler secret put "$name"
+            else
+              echo "::warning::secret $name is empty, skipped"
+            fi
+          done

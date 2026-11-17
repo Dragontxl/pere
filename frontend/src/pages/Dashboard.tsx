@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { taskApi } from '../api/client';
 import type { Task } from '../types';
 import { statusLabels } from '../types';
@@ -12,6 +12,7 @@ const STATUS_FILTERS = [
 ];
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -140,7 +141,7 @@ export default function Dashboard() {
             <div
               key={task.id}
               className="task-card"
-              onClick={() => window.location.href = `/tasks/${task.id}`}
+              onClick={() => navigate(`/tasks/${task.id}`)}
             >
               <div className="task-card-header">
                 <h3 className="task-title">{task.title || '未命名任务'}</h3>

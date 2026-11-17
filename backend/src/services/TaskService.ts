@@ -10,9 +10,16 @@ export class TaskService {
 
   generateUUID(seed: string): string {
     const timestamp = Date.now().toString(36);
-    const random = Math.random().toString(36).substring(2, 10);
-    const shortHash = seed ? seed.substring(0, 8) : 'task';
-    return `${timestamp}-${random}-${shortHash}`;
+    const random = crypto.randomUUID().slice(0, 8);
+    // Task ids end up in URLs and R2 object keys, so they must stay ASCII-only.
+    // Non-Latin titles (e.g. Chinese) collapse to an empty slug and fall back to "task".
+    const slug =
+      (seed || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 20) || 'task';
+    return `${timestamp}-${random}-${slug}`;
   }
 
   async createTask(data: {

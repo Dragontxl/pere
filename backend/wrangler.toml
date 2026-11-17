@@ -3,57 +3,17 @@ main = "src/index.ts"
 compatibility_date = "2024-05-29"
 compatibility_flags = ["nodejs_compat"]
 
-[env.production]
-name = "pexel-remotion-worker"
-main = "src/index.ts"
-
-[env.production.vars]
-ADMIN_API_KEY = "${ADMIN_API_KEY}"
-CALLBACK_SECRET = "${CALLBACK_SECRET}"
-JWT_SECRET = "${JWT_SECRET}"
-ENCRYPTION_KEY = "${ENCRYPTION_KEY}"
-GITHUB_PAT = "${GITHUB_PAT}"
-ENVIRONMENT = "production"
-GITHUB_REPO_OWNER = "Dragontxl"
-GITHUB_REPO_NAME = "pere"
-FRONTEND_URL = "${FRONTEND_URL}"
-R2_PUBLIC_URL = "${R2_PUBLIC_URL}"
-CLOUDFLARE_API_TOKEN = "${CLOUDFLARE_API_TOKEN}"
-CLOUDFLARE_ZONE_ID = "a591cd553ec34768475ee2010d4cd7ab"
-
-[[env.production.d1_databases]]
-binding = "DB"
-database_name = "pexel-remotion-db"
-database_id = "f4705826-ced3-4e40-97fd-2494e68cef79"
-
-[[env.production.r2_buckets]]
-binding = "R2"
-bucket_name = "pexel-remotion-bucket"
-
-[env.production.assets]
-directory = "../frontend/dist"
-not_found_handling = "single-page-application"
-
-[env.production.triggers]
-# crons removed - Workers Free tier limit reached (5 per account)
-
-[[env.production.routes]]
-pattern = "pere.ygtxl.dpdns.org"
-zone_name = "ygtxl.dpdns.org"
-custom_domain = true
+# Non-sensitive configuration only.
+# Secrets (ADMIN_API_KEY, CALLBACK_SECRET, JWT_SECRET, ENCRYPTION_KEY,
+# GITHUB_PAT, CLOUDFLARE_API_TOKEN) are managed with `wrangler secret put`
+# and must NOT be declared here.
 
 [vars]
-ADMIN_API_KEY = "${ADMIN_API_KEY}"
-CALLBACK_SECRET = "${CALLBACK_SECRET}"
-JWT_SECRET = "${JWT_SECRET}"
-ENCRYPTION_KEY = "${ENCRYPTION_KEY}"
-GITHUB_PAT = "${GITHUB_PAT}"
 ENVIRONMENT = "production"
 GITHUB_REPO_OWNER = "Dragontxl"
 GITHUB_REPO_NAME = "pere"
-FRONTEND_URL = "${FRONTEND_URL}"
-R2_PUBLIC_URL = "${R2_PUBLIC_URL}"
-CLOUDFLARE_API_TOKEN = "${CLOUDFLARE_API_TOKEN}"
+FRONTEND_URL = "https://pere.ygtxl.dpdns.org"
+R2_PUBLIC_URL = "https://pexel-remotion-bucket.d30bed2763a23cf8eddf343ca192c5ff.r2.cloudflarestorage.com"
 CLOUDFLARE_ZONE_ID = "a591cd553ec34768475ee2010d4cd7ab"
 
 [[d1_databases]]
@@ -74,5 +34,4 @@ pattern = "pere.ygtxl.dpdns.org"
 zone_name = "ygtxl.dpdns.org"
 custom_domain = true
 
-# [triggers] - Removed: Workers Free tier limit of 5 cron triggers per account reached
-# Scheduled tasks (auto-start PENDING, cleanup) can be re-enabled after upgrading to Workers Paid
+# [triggers] removed: Workers Free tier cron limit reached (5 per account)

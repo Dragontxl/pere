@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
 import { authApi } from '../api/client';
 import type { LoginResponse } from '../types';
 
@@ -12,26 +12,22 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<LoginResponse | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+function readStoredUser(): LoginResponse | null {
+  try {
+    const raw = localStorage.getItem('user');
+    return raw ? (JSON.parse(raw) as LoginResponse) : null;
+  } catch {
+    return null;
+  }
+}
 
-  useEffect(() => {
-    const savedToken = localStorage.getItem('token');
-    if (savedToken) {
-      setToken(savedToken);
-      // Restore user info from localStorage
-      const savedUser = localStorage.getItem('user');
-      if (savedUser) {
-        try {
-          setUser(JSON.parse(savedUser));
-        } catch {
-          // invalid JSON, clear
-          authApi.logout();
-        }
-      }
-    }
-  }, []);
+export function AuthProvider({ children }: { children: ReactNode }) {
+  // Initialize synchronously from localStorage so that the first render
+  // already knows whether the user is authenticated. Restoring the token
+  // in a useEffect instead would make ProtectedRoute redirect to /login
+  // before the effect runs (e.g. after a full page reload).
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'));
+  const [user, setUser] = useState<LoginResponse | null>(() => readStoredUser());
 
   const login = async (username: string, password: string) => {
     const data = await authApi.login(username, password);
