@@ -276,8 +276,10 @@ jobs:
           $cmdLine = $cmd -join " "
           Write-Host "Running: $cmdLine"
 
-          # 执行并捕获退出码
-          & $cmd
+          # 执行并捕获退出码（& $cmd 会把整个数组当成命令名，必须分开传参）
+          $exe = $cmd[0]
+          $cmdArgs = @($cmd[1..($cmd.Count - 1)])
+          & $exe @cmdArgs
           $exitCode = $LASTEXITCODE
 
           if ($exitCode -ne 0) {
