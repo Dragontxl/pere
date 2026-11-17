@@ -82,6 +82,44 @@ pere/
 
 此 workflow 仅用于前端构建验证和产物上传，实际部署由 `deploy-backend.yml` 在构建前端后随 Worker 一起部署。
 
+## 三之二、Worker 运行时变量（重要）
+
+`wrangler.toml` 里的 `[vars]` **不会**做 `${VAR}` 插值 —— wrangler 会把 `"${JWT_SECRET}"` 原样当字符串上传。
+因此所有密钥必须用下面的方式写入，且**不要**在 `wrangler.toml` 中声明：
+
+```bash
+cd backend
+npx wrangler secret put JWT_SECRET
+# 或在 CI 中：printf '%s' "$JWT_SECRET" | npx wrangler secret put JWT_SECRET
+```
+
+需要写入的密钥：`ADMIN_API_KEY`、`CALLBACK_SECRET`、`JWT_SECRET`、`ENCRYPTION_KEY`、`GITHUB_PAT`、`CLOUDFLARE_API_TOKEN`。
+`deploy-backend.yml` 已包含「配置 Worker Secrets」步骤自动完成这一步。
+
+验证是否生效：
+
+```bash
+curl -s -H "Authorization: Bearer $CF_API_TOKEN" \
+  "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/workers/scripts/pexel-remotion-worker/settings" \
+  | jq '.result.bindings[] | {name, type}'
+# 密钥应为 secret_text，绝不能出现 text: "${...}"
+```
+
+## 三之三、CI 环境要求
+
+- **Node.js ≥ 22.12**：wrangler 4 已不支持 Node 20，三个 workflow 均已固定为 `node-version: "22"`。
+- `@cloudflare/workers-types` 必须为 `^5`，否则 `npm install` 会因 wrangler 4 的 peer 依赖冲突而失败。
+- PowerShell 步骤中调用外部程序要用参数数组展开，不能写 `& $cmd`（会被当成单个命令名）：
+
+  ```powershell
+  $exe = $cmd[0]
+  $argsList = @($cmd[1..($cmd.Count - 1)])
+  & $exe @argsList
+  ```
+
+- `repository_dispatch` 的 `client_payload` 只能通过 `$env:GITHUB_EVENT_PATH` 指向的 JSON 文件读取，
+  GitHub Actions 不存在 `GITHUB_EVENT` 这个变量。
+
 ## 四、环境变量生成
 
 使用以下命令生成安全的密钥：
