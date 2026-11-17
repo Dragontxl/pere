@@ -232,9 +232,12 @@ export class TaskService {
         orientation: task.orientation,
         language: task.language,
         enable_subtitle: task.enable_subtitle,
-        phase: phase,
-        start_phase: phase,
-        end_phase: phase,
+        // One GitHub run executes the whole pipeline: the intermediate image
+        // assets live only on that runner, so later phases cannot run on a
+        // fresh checkout. Phase progress is reported through callbacks.
+        phase: 'SCENE_GEN',
+        start_phase: 'SCENE_GEN',
+        end_phase: 'TTS_COMPOSE',
       },
     };
 
@@ -262,13 +265,14 @@ export class TaskService {
       throw new Error(`Failed to dispatch workflow: ${response.status} ${errorText}`);
     }
 
-    // Update task status
-    const runningStatus = phaseStatusMap[phase].running;
+    // Update task status. The dispatch always covers the full pipeline
+    // (SCENE_GEN..TTS_COMPOSE), so the running status is the first phase.
+    const runningStatus = phaseStatusMap.SCENE_GEN.running;
     await this.env.DB.prepare(`
       UPDATE tasks SET status = ?, current_phase = ?, started_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now'), updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?
-    `).bind(runningStatus, phase, taskId).run();
+    `).bind(runningStatus, 'SCENE_GEN', taskId).run();
 
-    await this.logTask(taskId, phase, 'INFO', `Phase ${phase} triggered`);
+    await this.logTask(taskId, 'SCENE_GEN', 'INFO', `Full pipeline triggered (${phase})`);
   }
 
   /**
@@ -293,20 +297,16 @@ export class TaskService {
       const progress = Math.round((phaseIndex / phasesCount) * 100 + (phaseProgress / 100) * (100 / phasesCount));
 
       await this.env.DB.prepare(`
-        UPDATE tasks SET progress = ?, current_phase = ?, status = ?, updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now')
+        UPDATE tasks SET progress = MAX(progress, ?), current_phase = ?, status = ?, status_message = ?, updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now')
         WHERE id = ? AND ${terminalStatusClause}
-      `).bind(progress, phase, runningStatus, taskId).run();
+      `).bind(progress, phase, runningStatus, message || null, taskId).run();
     } else {
       const progress = Math.round((phaseIndex / phasesCount) * 100);
 
       await this.env.DB.prepare(`
-        UPDATE tasks SET progress = ?, current_phase = ?, status = ?, updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now')
+        UPDATE tasks SET progress = MAX(progress, ?), current_phase = ?, status = ?, status_message = ?, updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now')
         WHERE id = ? AND ${terminalStatusClause}
-      `).bind(progress, phase, runningStatus, taskId).run();
-    }
-
-    if (message) {
-      await this.env.DB.prepare(`UPDATE tasks SET status_message = ? WHERE id = ?`).bind(message, taskId).run();
+      `).bind(progress, phase, runningStatus, message || null, taskId).run();
     }
 
     return { success: true, taskId };
@@ -352,41 +352,118 @@ export class TaskService {
    * Handle GitHub workflow completion callback
    */
   async handleGitHubCallback(body: any): Promise<{ success: boolean; taskId: string }> {
-    const { task_id: taskId, phase, status, start_phase: startPhase, end_phase: endPhase } = body;
+    const {
+      task_id: taskId,
+      phase,
+      status,
+      message,
+      start_phase: startPhase,
+      end_phase: endPhase,
+    } = body;
+
+    const normalized = String(status || '').toLowerCase();
+    const isSuccess =
+      normalized === 'success' || normalized === 'completed' || normalized === 'done';
+    const isFailure =
+      normalized === 'failed' || normalized === 'failure' || normalized === 'error';
+
+    const task = await this.getTask(taskId);
+    if (!task) {
+      return { success: false, taskId };
+    }
+
+    // Final video metadata can arrive after the task already completed (main.py
+    // marks TTS_COMPOSE done, then sends the video URL), so store it first.
+    if (body.final_video_key) {
+      await this.env.DB.prepare(`
+        UPDATE tasks SET final_video_key = ?, final_video_url = ?, updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?
+      `).bind(body.final_video_key, body.final_video_url || null, taskId).run();
+    }
+
+    // Never touch a task that already reached a terminal state.
+    if (task.status === 'COMPLETED' || task.status === 'CANCELLED') {
+      return { success: true, taskId };
+    }
 
     await this.env.DB.prepare(`
       UPDATE tasks SET updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?
     `).bind(taskId).run();
 
-    if (status === 'success') {
-      try {
-        // Range execution (start_phase !== end_phase): full pipeline completed
-        if (startPhase && endPhase && startPhase !== endPhase) {
-          await this.env.DB.prepare(`
-            UPDATE tasks SET status = ?, completed_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now'), updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now')
-            WHERE id = ?
-          `).bind('COMPLETED', taskId).run();
-          await this.logTask(taskId, phase, 'INFO', `Range execution completed: ${startPhase} to ${endPhase}`);
-        } else if (startPhase && endPhase && startPhase === endPhase) {
-          // Single phase completed: advance to next phase
-          await this.advancePhase(taskId);
-        } else {
-          await this.logTask(taskId, phase, 'WARNING', `Missing phase range: start=${startPhase}, end=${endPhase}`);
-        }
-      } catch (error) {
-        console.error('handleGitHubCallback: Failed to process completion:', error);
-        await this.env.DB.prepare(`
-          UPDATE tasks SET status = ?, error_msg = ?, updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?
-        `).bind('FAILED', (error as Error).message, taskId).run();
-      }
-    } else {
+    if (isFailure) {
       await this.env.DB.prepare(`
         UPDATE tasks SET status = ?, error_msg = ?, updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?
-      `).bind('FAILED', `Phase ${phase} failed in GitHub Actions`, taskId).run();
-      await this.logTask(taskId, phase, 'ERROR', `Phase ${phase} failed`);
+      `).bind('FAILED', `Phase ${phase || 'unknown'} failed in GitHub Actions`, taskId).run();
+      await this.logTask(taskId, phase, 'ERROR', `Phase ${phase || 'unknown'} failed`);
+      return { success: true, taskId };
+    }
+
+    // Phase-level events emitted by main.py carry no phase range. They only move
+    // the UI forward: 'started'/'processing' refresh progress, 'completed' marks
+    // that phase done. They must never dispatch another workflow run.
+    if (!startPhase || !endPhase) {
+      if (isSuccess) {
+        await this.markPhaseDone(taskId, phase);
+        if (message) {
+          await this.logTask(taskId, phase, 'INFO', message);
+        }
+      } else {
+        await this.updateTaskProgress(body);
+        if (message) {
+          await this.logTask(taskId, phase, 'INFO', message);
+        }
+      }
+      return { success: true, taskId };
+    }
+
+    try {
+      // Range execution (start_phase !== end_phase): the whole pipeline finished.
+      if (startPhase !== endPhase) {
+        await this.env.DB.prepare(`
+          UPDATE tasks SET status = ?, progress = 100, completed_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now'), updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now')
+          WHERE id = ?
+        `).bind('COMPLETED', taskId).run();
+        await this.logTask(taskId, phase, 'INFO', `Range execution completed: ${startPhase} to ${endPhase}`);
+        return { success: true, taskId };
+      }
+
+      // Single-phase dispatch: advance only once per phase (main.py and the
+      // workflow may both report the same completion).
+      if (task.current_phase !== phase) {
+        await this.logTask(
+          taskId,
+          phase,
+          'INFO',
+          `Ignoring duplicate completion callback for ${phase} (current phase is ${task.current_phase})`,
+        );
+        return { success: true, taskId };
+      }
+
+      await this.advancePhase(taskId);
+    } catch (error) {
+      console.error('handleGitHubCallback: Failed to process completion:', error);
+      await this.env.DB.prepare(`
+        UPDATE tasks SET status = ?, error_msg = ?, updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?
+      `).bind('FAILED', (error as Error).message, taskId).run();
     }
 
     return { success: true, taskId };
+  }
+
+  /**
+   * Mark a single phase as done without dispatching the next workflow run.
+   * Used by main.py's phase-level callbacks inside a full-pipeline run.
+   */
+  async markPhaseDone(taskId: string, phase: TaskPhase): Promise<void> {
+    const index = phaseOrder.indexOf(phase);
+    if (index < 0) return;
+
+    const doneStatus = phaseStatusMap[phase].done;
+    const progress = Math.round(((index + 1) / phaseOrder.length) * 100);
+
+    await this.env.DB.prepare(`
+      UPDATE tasks SET status = ?, progress = MAX(progress, ?), current_phase = ?, status_message = ?, updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now')
+      WHERE id = ? AND status NOT IN ('COMPLETED', 'FAILED', 'CANCELLED')
+    `).bind(doneStatus, progress, phase, `Phase ${phase} completed`, taskId).run();
   }
 
   /**

@@ -345,6 +345,8 @@ jobs:
             task_id = $env:TASK_ID
             phase = $phase
             status = $status
+            start_phase = $env:START_PHASE
+            end_phase = $env:END_PHASE
             message = $message
             processed_count = 1
             total_count = 1
