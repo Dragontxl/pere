@@ -287,7 +287,7 @@ def setup_environment(config: dict, render_params: dict) -> tuple:
     work_dir.mkdir(parents=True, exist_ok=True)
 
     temp_dir = work_dir / "temp"
-    temp_dir.mkdir(parents=True, exist=True)
+    temp_dir.mkdir(parents=True, exist_ok=True)
 
     return work_dir, temp_dir
 
