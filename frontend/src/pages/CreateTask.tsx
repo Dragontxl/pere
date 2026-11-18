@@ -97,6 +97,17 @@ export default function CreateTask() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    // 校验：上传模式必须有文件，粘贴模式必须有内容
+    if (mode === 'upload' && !fileKey) {
+      setError('请先上传文章文件');
+      return;
+    }
+    if (mode === 'paste' && !article.trim()) {
+      setError('请输入文章内容');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -339,7 +350,7 @@ export default function CreateTask() {
           <button type="button" className="btn btn-ghost" onClick={() => navigate(-1)}>
             取消
           </button>
-          <button type="submit" className="btn btn-primary" disabled={loading}>
+          <button type="submit" className="btn btn-primary" disabled={loading || (mode === 'upload' && !fileKey) || (mode === 'paste' && !article.trim())}>
             {loading ? '创建中...' : '创建并开始'}
           </button>
         </div>
