@@ -841,7 +841,7 @@ pexel-remotion/                          # 本地目录（GitHub 仓库名：per
 
 ---
 
-## 十、部署排障记录（2026-11-17）
+## 十、部署排障记录（2026-11-17 ~ 2026-11-18）
 
 联调过程中踩到的问题与结论，后续改配置时对照检查：
 
@@ -860,5 +860,8 @@ pexel-remotion/                          # 本地目录（GitHub 仓库名：per
 | 单阶段串行不可行 | 图片素材只存在于当次 runner，换一次 checkout 后阶段 2/3 无素材可读 | 一次 GitHub run 跑完整管线 `SCENE_GEN → TTS_COMPOSE`，阶段进度由回调上报 |
 | 进度条末阶段显示「进行中」 | `ProgressBar` 在 `progress=100` 时把最后一个阶段判为 current，`isCurrent` 分支优先输出「进行中」 | `isCompleted` 时不再输出「进行中」，改输出「已完成」 |
 | 最终视频无法下载（404，key 为空） | `/files/nocache/*` 用路径通配符 `c.req.param('*')` 取 key，含斜杠的多段 key（`tasks/<id>/final_output.mp4`）在边缘运行时取到空串，`R2.get('')` 返回 404 | key 改从 query 参数 `?key=` 读取（与 `/version` 一致），并补上 Range 分片支持，视频预览/拖动/下载均可用 |
+| dispatch 报 422「No more than 10 properties」 | 加 `bgm_key` 后 `client_payload` 达到 11 个属性，超过 GitHub repository_dispatch 上限 | 移除冗余的 `phase` 字段（与 `start_phase` 值相同且 workflow 不使用），保持 10 个以内 |
+| runner 上 ffmpeg 找不到，`[WinError 2]` | `windows-latest` runner 无预装 ffmpeg，`_resolve_ffmpeg` 回退到 `"ffmpeg"` 字符串后 `subprocess` 抛 `FileNotFoundError`，字幕烧录/静音音轨/BGM 混合全失败 | workflow 用 `imageio-ffmpeg`（随 moviepy 安装）的 `get_ffmpeg_exe()` 设置 `IMAGEIO_FFMPEG_EXE` 环境变量，`_resolve_ffmpeg` 优先读取 |
+| 带 BGM 的最终视频没上传到 R2 | `mix_bgm` 后 `main.py` 将 `final_output.mp4` 重命名为 `final_with_bgm.mp4`，原上传步骤只找 `final_output.mp4`，文件不存在被跳过 | 上传步骤检测两个文件，统一以 `final_output.mp4` 作为 R2 key，保证下载链接一致 |
 
-当前状态：Worker / D1 / R2 / GitHub Actions 均已打通，创建任务即自动触发 `video-generation` workflow，一次 run 跑完整管线，任务详情页实时展示 4 阶段进度，最终视频落 R2 并可在线预览与下载。
+当前状态：Worker / D1 / R2 / GitHub Actions 均已打通，创建任务即自动触发 `video-generation` workflow，一次 run 跑完整管线，任务详情页实时展示 4 阶段进度，最终视频落 R2 并可在线预览与下载。背景音乐可选：创建任务时从 4 段预设 BGM 中选择，不选则不加；选定后 `main.py` 在拼接后混合 BGM（视频流零重编码，BGM 循环铺满时长），最终视频以 `final_output.mp4` 上传 R2，下载链接与无 BGM 任务一致。
