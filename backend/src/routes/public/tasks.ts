@@ -60,6 +60,7 @@ taskRoutes.post('/', async (c) => {
       orientation: body.orientation || 'landscape',
       language: body.language || 'zh',
       enableSubtitle: body.enable_subtitle !== false,
+      bgmKey: body.bgm_key || null,
     });
 
     try {

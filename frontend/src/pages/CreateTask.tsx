@@ -1,6 +1,7 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { taskApi } from '../api/client';
+import { taskApi, bgmApi } from '../api/client';
+import type { BgmOption } from '../types';
 
 type ArticleMode = 'ai' | 'paste' | 'upload';
 
@@ -13,11 +14,17 @@ export default function CreateTask() {
   const [orientation, setOrientation] = useState('landscape');
   const [language, setLanguage] = useState('zh');
   const [enableSubtitle, setEnableSubtitle] = useState(true);
+  const [bgmKey, setBgmKey] = useState('');
+  const [bgmOptions, setBgmOptions] = useState<BgmOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const navigate = useNavigate();
+
+  useEffect(() => {
+    bgmApi.options().then(setBgmOptions).catch(() => setBgmOptions([]));
+  }, []);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -69,6 +76,7 @@ export default function CreateTask() {
         orientation,
         language,
         enable_subtitle: enableSubtitle,
+        bgm_key: bgmKey || undefined,
       });
 
       navigate(`/tasks/${data.id}`);
@@ -225,6 +233,26 @@ export default function CreateTask() {
               />
               <span>添加字幕</span>
             </label>
+          </div>
+
+          <div className="form-group">
+            <label>背景音乐</label>
+            <select
+              value={bgmKey}
+              onChange={(e) => setBgmKey(e.target.value)}
+            >
+              <option value="">不添加背景音乐</option>
+              {bgmOptions.map((bgm) => (
+                <option key={bgm.key} value={bgm.key}>
+                  {bgm.name}
+                </option>
+              ))}
+            </select>
+            <p className="form-hint">
+              {bgmKey
+                ? bgmOptions.find((b) => b.key === bgmKey)?.description || '已选择背景音乐'
+                : '生成视频时混合所选背景音乐（可选）'}
+            </p>
           </div>
         </div>
 

@@ -363,6 +363,8 @@ def mix_bgm(video_path: str, bgm_path: str, output_path: str,
     - 解说音轨：保持原音量（1.0）
     - BGM 音轨：降低音量（默认 0.25）避免压过解说
     - amix 滤镜将两条音频混合为一条
+    - BGM 用 -stream_loop -1 无限循环，再用 atrim 截取到视频时长，
+      因此 BGM 比视频短时也能持续铺满整段，不会提前静音
 
     Args:
         video_path: 已含解说音轨的视频路径
@@ -391,6 +393,7 @@ def mix_bgm(video_path: str, bgm_path: str, output_path: str,
         cmd = [
             FFMPEG_EXE, "-y",
             "-i", video_path,
+            "-stream_loop", "-1",       # BGM 无限循环，短于视频时持续铺满
             "-i", bgm_path,
             "-filter_complex", filter_complex,
             "-map", "0:v",

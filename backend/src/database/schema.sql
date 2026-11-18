@@ -31,6 +31,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     orientation TEXT DEFAULT 'landscape',
     language TEXT DEFAULT 'zh',
     enable_subtitle BOOLEAN DEFAULT TRUE,
+    bgm_key TEXT,
+    bgm_name TEXT,
     status TEXT NOT NULL DEFAULT 'PENDING',
     current_phase TEXT,
     scenes_key TEXT,

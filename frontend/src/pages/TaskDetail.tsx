@@ -244,6 +244,10 @@ export default function TaskDetail() {
                 <span className="info-value">{task.enable_subtitle ? '已启用' : '未启用'}</span>
               </div>
               <div className="info-item">
+                <span className="info-label">背景音乐</span>
+                <span className="info-value">{task.bgm_name || '未添加'}</span>
+              </div>
+              <div className="info-item">
                 <span className="info-label">进度</span>
                 <span className="info-value">{task.progress}%</span>
               </div>

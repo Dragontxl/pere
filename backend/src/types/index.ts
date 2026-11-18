@@ -33,6 +33,8 @@ export interface Task {
   orientation: string;
   language: string;
   enable_subtitle: boolean;
+  bgm_key: string | null;
+  bgm_name: string | null;
   status: string;
   current_phase: string | null;
   scenes_key: string | null;

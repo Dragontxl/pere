@@ -156,6 +156,11 @@ export default function Dashboard() {
                 <span className="meta-item">
                   方向：{task.orientation === 'portrait' ? '竖屏' : '横屏'}
                 </span>
+                {task.bgm_name && (
+                  <span className="meta-item">
+                    BGM：{task.bgm_name}
+                  </span>
+                )}
                 <span className="meta-item">
                   创建：{formatDate(task.created_at)}
                 </span>

@@ -7,13 +7,18 @@ venv/
 env/
 
 # 输出
-assets/
+assets/*
 temp/
 output/
 *.mp4
 *.mp3
 *.wav
 *.srt
+
+# 背景音乐素材需要提交到仓库（workflow 通过 checkout 获取后传给 main.py --bgm）
+!assets/bgm/
+!assets/bgm/*.mp3
+!assets/bgm/*.wav
 
 # Remotion
 remotion/node_modules/

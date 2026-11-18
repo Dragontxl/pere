@@ -30,6 +30,8 @@ export interface Task {
   orientation: string;
   language: string;
   enable_subtitle: boolean;
+  bgm_key: string | null;
+  bgm_name: string | null;
   status: string;
   current_phase: string | null;
   scenes_key: string | null;
@@ -69,6 +71,13 @@ export interface ApiResponse<T> {
   code: number;
   data: T;
   msg: string;
+}
+
+// 背景音乐选项
+export interface BgmOption {
+  key: string;
+  name: string;
+  description?: string;
 }
 
 // Phase display names

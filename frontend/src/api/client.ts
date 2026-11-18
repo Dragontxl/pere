@@ -1,4 +1,4 @@
-import type { ApiResponse, Task, TaskLog, LoginResponse } from '../types';
+import type { ApiResponse, Task, TaskLog, LoginResponse, BgmOption } from '../types';
 
 const API_BASE = '/api/v1';
 
@@ -94,6 +94,7 @@ export const taskApi = {
     orientation: string;
     language: string;
     enable_subtitle: boolean;
+    bgm_key?: string;
   }): Promise<Task> {
     return request<Task>('/tasks', {
       method: 'POST',
@@ -133,5 +134,13 @@ export const fileApi = {
 
   getNoCacheUrl(key: string): string {
     return `${API_BASE}/files/nocache?key=${encodeURIComponent(key)}`;
+  },
+};
+
+// ── BGM ────────────────────────────────────────────────────────────────
+
+export const bgmApi = {
+  async options(): Promise<BgmOption[]> {
+    return request<BgmOption[]>('/bgm/options');
   },
 };

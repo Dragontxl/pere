@@ -1,5 +1,6 @@
 import { Bindings } from '../types/env';
 import { Task, TaskPhase, TaskStatus, phaseOrder, phaseStatusMap } from '../types';
+import { findBgmName } from '../constants/bgm';
 
 export class TaskService {
   constructor(public env: Bindings) {}
@@ -31,8 +32,10 @@ export class TaskService {
     orientation: string;
     language: string;
     enableSubtitle: boolean;
+    bgmKey?: string | null;
   }): Promise<Task> {
     const now = new Date().toISOString();
+    const bgmName = findBgmName(data.bgmKey);
     const task: Task = {
       id: this.generateUUID(data.title || 'video'),
       user_id: data.userId,
@@ -43,6 +46,8 @@ export class TaskService {
       orientation: data.orientation || 'landscape',
       language: data.language || 'zh',
       enable_subtitle: data.enableSubtitle !== false,
+      bgm_key: data.bgmKey || null,
+      bgm_name: bgmName,
       status: 'PENDING',
       current_phase: 'SCENE_GEN',
       scenes_key: null,
@@ -64,9 +69,9 @@ export class TaskService {
     await this.env.DB.prepare(`
       INSERT INTO tasks (
         id, user_id, title, article_source, article_content, article_file_key,
-        orientation, language, enable_subtitle, status, current_phase, progress,
+        orientation, language, enable_subtitle, bgm_key, bgm_name, status, current_phase, progress,
         retry_count, max_retries, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       task.id,
       task.user_id,
@@ -77,6 +82,8 @@ export class TaskService {
       task.orientation,
       task.language,
       task.enable_subtitle,
+      task.bgm_key,
+      task.bgm_name,
       task.status,
       task.current_phase,
       task.progress,
@@ -232,6 +239,7 @@ export class TaskService {
         orientation: task.orientation,
         language: task.language,
         enable_subtitle: task.enable_subtitle,
+        bgm_key: task.bgm_key || '',
         // One GitHub run executes the whole pipeline: the intermediate image
         // assets live only on that runner, so later phases cannot run on a
         // fresh checkout. Phase progress is reported through callbacks.
