@@ -46,6 +46,12 @@ export interface Task {
   max_retries: number;
   error_msg: string | null;
   status_message: string | null;
+  processed_frames: number;
+  total_frames: number;
+  failed_frames: number;
+  start_phase: string | null;
+  end_phase: string | null;
+  phase_details: string | null;
   created_at: string;
   updated_at: string;
   started_at: string | null;

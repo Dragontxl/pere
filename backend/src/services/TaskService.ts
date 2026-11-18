@@ -59,6 +59,12 @@ export class TaskService {
       max_retries: 3,
       error_msg: null,
       status_message: null,
+      processed_frames: 0,
+      total_frames: 0,
+      failed_frames: 0,
+      start_phase: null,
+      end_phase: null,
+      phase_details: null,
       created_at: now,
       updated_at: now,
       started_at: null,
@@ -70,8 +76,10 @@ export class TaskService {
       INSERT INTO tasks (
         id, user_id, title, article_source, article_content, article_file_key,
         orientation, language, enable_subtitle, bgm_key, bgm_name, status, current_phase, progress,
-        retry_count, max_retries, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        retry_count, max_retries, processed_frames, total_frames, failed_frames,
+        start_phase, end_phase, phase_details,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       task.id,
       task.user_id,
@@ -89,6 +97,12 @@ export class TaskService {
       task.progress,
       task.retry_count,
       task.max_retries,
+      task.processed_frames,
+      task.total_frames,
+      task.failed_frames,
+      task.start_phase,
+      task.end_phase,
+      task.phase_details,
       task.created_at,
       task.updated_at
     ).run();
@@ -150,15 +164,13 @@ export class TaskService {
       return false;
     }
 
-    // Delete R2 objects for this task
+    // Delete R2 objects for this task under the correct prefix
+    // R2 keys use the format: tasks/<task_id>/<filename>
     let deletedFileCount = 0;
     try {
-      const objects = await this.env.R2.list({ prefix: `${id}/`, limit: 1000 });
-      const keys = objects.objects.map(obj => obj.key);
-      if (keys.length > 0) {
-        await this.env.R2.delete(keys);
-        deletedFileCount += keys.length;
-      }
+      await this.deleteR2Prefix(`tasks/${id}/`);
+      // deleteR2Prefix handles pagination internally; count is tracked via log
+      deletedFileCount = -1; // unknown count after paginated delete
     } catch (error) {
       console.error(`Failed to delete R2 objects for task ${id}:`, error);
     }
@@ -166,8 +178,34 @@ export class TaskService {
     await this.env.DB.prepare('DELETE FROM operation_logs WHERE task_id = ?').bind(id).run();
     const result = await this.env.DB.prepare('DELETE FROM tasks WHERE id = ?').bind(id).run();
 
-    console.log(`Deleted task ${id} and ${deletedFileCount} R2 objects`);
+    console.log(`Deleted task ${id} and R2 folder tasks/${id}/`);
     return (result as any).changes > 0;
+  }
+
+  /**
+   * Recursively delete all R2 objects under a prefix using pagination.
+   * R2.list returns up to 1000 objects per call; we loop until truncated is false.
+   */
+  async deleteR2Prefix(prefix: string): Promise<number> {
+    let totalDeleted = 0;
+    let cursor: string | undefined = undefined;
+
+    do {
+      const options: any = { prefix, limit: 1000 };
+      if (cursor) options.cursor = cursor;
+
+      const objects = await this.env.R2.list(options);
+      const keys = objects.objects.map((obj: any) => obj.key);
+
+      if (keys.length > 0) {
+        await this.env.R2.delete(keys);
+        totalDeleted += keys.length;
+      }
+
+      cursor = objects.truncated ? objects.cursor : undefined;
+    } while (cursor);
+
+    return totalDeleted;
   }
 
   async cancelTask(id: string): Promise<Task | null> {
@@ -191,7 +229,9 @@ export class TaskService {
       UPDATE tasks SET status = ?, retry_count = retry_count + 1, updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?
     `).bind('PENDING', id).run();
 
-    await this.startTask(id);
+    // Retry from the current phase, running through to TTS_COMPOSE
+    const currentPhase = (task.current_phase as TaskPhase) || 'SCENE_GEN';
+    await this.triggerPhase(id, currentPhase, currentPhase, 'TTS_COMPOSE');
     return this.getTask(id);
   }
 
@@ -203,14 +243,21 @@ export class TaskService {
     if (!task) return null;
     if (task.status !== 'PENDING') return null;
 
-    await this.triggerPhase(id, 'SCENE_GEN');
+    // Dispatch the full pipeline: SCENE_GEN → TTS_COMPOSE
+    await this.triggerPhase(id, 'SCENE_GEN', 'SCENE_GEN', 'TTS_COMPOSE');
     return this.getTask(id);
   }
 
   /**
    * Trigger a GitHub Actions workflow for a specific phase
+   * Supports both single-phase and range execution (start_phase → end_phase)
    */
-  async triggerPhase(taskId: string, phase: TaskPhase): Promise<void> {
+  async triggerPhase(
+    taskId: string,
+    phase: TaskPhase,
+    startPhase?: TaskPhase,
+    endPhase?: TaskPhase,
+  ): Promise<void> {
     const task = await this.getTask(taskId);
     if (!task) {
       throw new Error('Task not found');
@@ -229,7 +276,12 @@ export class TaskService {
       throw new Error('GITHUB_PAT not configured');
     }
 
-    const payload = {
+    // Determine phase range: single phase or range execution
+    const rangeStart = startPhase || phase;
+    const rangeEnd = endPhase || phase;
+    const isRange = rangeStart !== rangeEnd;
+
+    const payload: Record<string, any> = {
       event_type: 'video-generation',
       client_payload: {
         task_id: taskId,
@@ -240,13 +292,17 @@ export class TaskService {
         language: task.language,
         enable_subtitle: task.enable_subtitle,
         bgm_key: task.bgm_key || '',
-        // One GitHub run executes the whole pipeline: the intermediate image
-        // assets live only on that runner, so later phases cannot run on a
-        // fresh checkout. Phase progress is reported through callbacks.
-        start_phase: 'SCENE_GEN',
-        end_phase: 'TTS_COMPOSE',
+        start_phase: rangeStart,
+        end_phase: rangeEnd,
       },
     };
+
+    // Store the phase range on the task for later callback handling
+    if (isRange) {
+      await this.env.DB.prepare(
+        `UPDATE tasks SET start_phase = ?, end_phase = ?, updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?`
+      ).bind(rangeStart, rangeEnd, taskId).run();
+    }
 
     const authHeader = apiKey.startsWith('ghp_')
       ? `token ${apiKey}`
@@ -272,21 +328,188 @@ export class TaskService {
       throw new Error(`Failed to dispatch workflow: ${response.status} ${errorText}`);
     }
 
-    // Update task status. The dispatch always covers the full pipeline
-    // (SCENE_GEN..TTS_COMPOSE), so the running status is the first phase.
-    const runningStatus = phaseStatusMap.SCENE_GEN.running;
+    // Update task status. For range execution, set the running status to the
+    // first phase in the range. For single phase, use the requested phase.
+    const runningPhase = isRange ? rangeStart : phase;
+    const runningStatus = phaseStatusMap[runningPhase as TaskPhase]?.running || phaseOrder[0] && phaseStatusMap[phaseOrder[0]].running;
     await this.env.DB.prepare(`
-      UPDATE tasks SET status = ?, current_phase = ?, started_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now'), updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?
-    `).bind(runningStatus, 'SCENE_GEN', taskId).run();
+      UPDATE tasks SET status = ?, current_phase = ?, started_at = COALESCE(started_at, STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now')), updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?
+    `).bind(runningStatus, runningPhase, taskId).run();
 
-    await this.logTask(taskId, 'SCENE_GEN', 'INFO', `Full pipeline triggered (${phase})`);
+    await this.logTask(taskId, runningPhase, 'INFO', `Phase triggered: ${runningPhase}${isRange ? ` (${rangeStart} → ${rangeEnd})` : ''}`);
+  }
+
+  /**
+   * Start a specific phase (or range) for a task.
+   * Resets the task to the target phase's running status.
+   */
+  async startPhase(
+    taskId: string,
+    phase: TaskPhase,
+    startPhase?: TaskPhase,
+    endPhase?: TaskPhase,
+  ): Promise<Task | null> {
+    const task = await this.getTask(taskId);
+    if (!task) return null;
+
+    // Allow starting from any phase if the task is in a terminal state or
+    // the current phase is at or after the target phase.
+    if (!['COMPLETED', 'FAILED', 'CANCELLED'].includes(task.status) &&
+      phaseOrder.indexOf(task.current_phase as TaskPhase) < phaseOrder.indexOf(phase)) {
+      throw new Error(`Cannot start phase ${phase} while task is in ${task.current_phase}`);
+    }
+
+    // For range execution, reset the task to the first phase of the range
+    const targetPhase = startPhase || phase;
+    await this.triggerPhase(taskId, phase, startPhase, endPhase);
+
+    return this.getTask(taskId);
+  }
+
+  /**
+   * Check if required R2 artifacts exist for a phase before allowing execution.
+   * Returns { ready, missing, available }.
+   */
+  async checkPhaseMaterials(taskId: string, phase: TaskPhase): Promise<{
+    ready: boolean;
+    missing: string[];
+    available: string[];
+  }> {
+    const task = await this.getTask(taskId);
+    if (!task) {
+      return { ready: false, missing: ['任务不存在'], available: [] };
+    }
+
+    const prefix = `tasks/${taskId}/`;
+    const requiredArtifacts: Record<TaskPhase, string[]> = {
+      SCENE_GEN: [],
+      ASSET_MATCH: ['scenes.json'],
+      REMOTION_RENDER: ['scenes.json', 'match_results.json'],
+      TTS_COMPOSE: ['scenes.json', 'match_results.json', 'decisions.json'],
+    };
+
+    const required = requiredArtifacts[phase] || [];
+    const missing: string[] = [];
+    const available: string[] = [];
+
+    if (required.length === 0) {
+      return { ready: true, missing, available };
+    }
+
+    // Check each required artifact in R2
+    for (const artifact of required) {
+      const object = await this.env.R2.get(`${prefix}${artifact}`);
+      if (object) {
+        available.push(artifact);
+      } else {
+        missing.push(artifact);
+      }
+    }
+
+    return { ready: missing.length === 0, missing, available };
+  }
+
+  /**
+   * Trigger a single-clip / single-task re-render for specified scenes.
+   * Dispatches a GitHub workflow with rerender parameters.
+   */
+  async rerenderClips(
+    taskId: string,
+    sceneIds: number[],
+    imageOverrides?: Record<number, string>,
+    typeOverrides?: Record<number, string>,
+  ): Promise<Task | null> {
+    const task = await this.getTask(taskId);
+    if (!task) return null;
+
+    const owner = this.env.GITHUB_REPO_OWNER;
+    const repo = this.env.GITHUB_REPO_NAME;
+    const apiKey = this.env.GITHUB_PAT;
+
+    if (!owner || !repo || !apiKey) {
+      throw new Error('GitHub repository not configured');
+    }
+
+    // Build rerender specs from overrides
+    const rerenderClipsSpec = sceneIds.join(',');
+    const rerenderImages: string[] = [];
+    const rerenderTypes: string[] = [];
+
+    if (imageOverrides) {
+      for (const [sceneId, path] of Object.entries(imageOverrides)) {
+        rerenderImages.push(`${sceneId}:${path}`);
+      }
+    }
+    if (typeOverrides) {
+      for (const [sceneId, type] of Object.entries(typeOverrides)) {
+        rerenderTypes.push(`${sceneId}:${type}`);
+      }
+    }
+
+    const payload = {
+      event_type: 'video-generation',
+      client_payload: {
+        task_id: taskId,
+        article_source: task.article_source,
+        article_content: task.article_content || '',
+        article_file_key: task.article_file_key || '',
+        orientation: task.orientation,
+        language: task.language,
+        enable_subtitle: task.enable_subtitle,
+        bgm_key: task.bgm_key || '',
+        start_phase: 'TTS_COMPOSE',
+        end_phase: 'TTS_COMPOSE',
+        rerender_clips: rerenderClipsSpec,
+        rerender_image: rerenderImages,
+        rerender_type: rerenderTypes,
+      },
+    };
+
+    const authHeader = apiKey.startsWith('ghp_')
+      ? `token ${apiKey}`
+      : `Bearer ${apiKey}`;
+
+    const githubUrl = `https://api.github.com/repos/${owner}/${repo}/dispatches`;
+
+    const response = await fetch(githubUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': authHeader,
+        'User-Agent': 'pexel-remotion-platform',
+        'Accept': 'application/vnd.github.v3+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+      body: JSON.stringify(payload),
+      redirect: 'follow',
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to dispatch rerender workflow: ${response.status} ${errorText}`);
+    }
+
+    await this.env.DB.prepare(`
+      UPDATE tasks SET status = ?, current_phase = ?, updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?
+    `).bind(phaseStatusMap.TTS_COMPOSE.running, 'TTS_COMPOSE', taskId).run();
+
+    await this.logTask(taskId, 'TTS_COMPOSE', 'INFO', `Re-render triggered for scenes: ${rerenderClipsSpec}`);
+
+    return this.getTask(taskId);
   }
 
   /**
    * Update task progress from workflow callback
    */
   async updateTaskProgress(body: any): Promise<{ success: boolean; taskId: string }> {
-    const { task_id: taskId, phase, processed_count: processedCount, total_count: totalCount, message } = body;
+    const {
+      task_id: taskId,
+      phase,
+      processed_count: processedCount,
+      total_count: totalCount,
+      failed_count: failedCount,
+      message,
+    } = body;
 
     const taskResult = await this.env.DB.prepare('SELECT status FROM tasks WHERE id = ?').bind(taskId).first() as any;
     if (taskResult?.status === 'COMPLETED') {
@@ -299,21 +522,57 @@ export class TaskService {
 
     const terminalStatusClause = "status NOT IN ('COMPLETED', 'FAILED', 'CANCELLED')";
 
+    // Build phase_details JSON to track per-phase progress
+    const existingDetails = (taskResult as any)?.phase_details;
+    let phaseDetails: Record<string, any> = {};
+    try {
+      if (existingDetails) {
+        phaseDetails = JSON.parse(existingDetails);
+      }
+    } catch {
+      phaseDetails = {};
+    }
+    phaseDetails[phase] = {
+      processed: processedCount || 0,
+      total: totalCount || 0,
+      failed: failedCount || 0,
+      updated_at: new Date().toISOString(),
+    };
+
     if (totalCount > 0) {
       const phaseProgress = Math.round((processedCount / totalCount) * 100);
       const progress = Math.round((phaseIndex / phasesCount) * 100 + (phaseProgress / 100) * (100 / phasesCount));
 
       await this.env.DB.prepare(`
-        UPDATE tasks SET progress = MAX(progress, ?), current_phase = ?, status = ?, status_message = ?, updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now')
+        UPDATE tasks SET
+          progress = MAX(progress, ?),
+          current_phase = ?,
+          status = ?,
+          status_message = ?,
+          processed_frames = COALESCE(processed_frames, 0) + ?,
+          total_frames = COALESCE(total_frames, 0) + ?,
+          failed_frames = COALESCE(failed_frames, 0) + ?,
+          phase_details = ?,
+          updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now')
         WHERE id = ? AND ${terminalStatusClause}
-      `).bind(progress, phase, runningStatus, message || null, taskId).run();
+      `).bind(
+        progress, phase, runningStatus, message || null,
+        processedCount || 0, totalCount || 0, failedCount || 0,
+        JSON.stringify(phaseDetails), taskId
+      ).run();
     } else {
       const progress = Math.round((phaseIndex / phasesCount) * 100);
 
       await this.env.DB.prepare(`
-        UPDATE tasks SET progress = MAX(progress, ?), current_phase = ?, status = ?, status_message = ?, updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now')
+        UPDATE tasks SET
+          progress = MAX(progress, ?),
+          current_phase = ?,
+          status = ?,
+          status_message = ?,
+          phase_details = ?,
+          updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now')
         WHERE id = ? AND ${terminalStatusClause}
-      `).bind(progress, phase, runningStatus, message || null, taskId).run();
+      `).bind(progress, phase, runningStatus, message || null, JSON.stringify(phaseDetails), taskId).run();
     }
 
     return { success: true, taskId };

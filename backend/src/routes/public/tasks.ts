@@ -142,4 +142,96 @@ taskRoutes.post('/:id/start', async (c) => {
   }
 });
 
+/**
+ * Start a specific phase (or range) for a task.
+ * Body: { start_phase?, end_phase? } — if not provided, runs the single phase.
+ */
+taskRoutes.post('/:id/start-phase/:phase', async (c) => {
+  const service = new TaskService(c.env as Bindings);
+  const phase = c.req.param('phase') as any;
+
+  try {
+    const validPhases = ['SCENE_GEN', 'ASSET_MATCH', 'REMOTION_RENDER', 'TTS_COMPOSE'];
+    if (!validPhases.includes(phase)) {
+      return c.json({ code: 400, data: null, msg: 'Invalid phase' }, 400);
+    }
+
+    let startPhase: string | undefined;
+    let endPhase: string | undefined;
+
+    const body = await c.req.json().catch(() => ({}));
+    if (body.start_phase && validPhases.includes(body.start_phase)) {
+      startPhase = body.start_phase;
+    }
+    if (body.end_phase && validPhases.includes(body.end_phase)) {
+      endPhase = body.end_phase;
+    }
+
+    const result = await service.startPhase(c.req.param('id'), phase, startPhase as any, endPhase as any);
+
+    if (!result) {
+      return c.json({ code: 400, data: null, msg: 'Failed to start phase' }, 400);
+    }
+
+    return c.json({ code: 200, data: result, msg: 'Phase started successfully' });
+  } catch (error) {
+    console.error('Failed to start phase:', error);
+    return c.json({ code: 500, data: null, msg: 'Failed to start phase: ' + (error as Error).message }, 500);
+  }
+});
+
+/**
+ * Check if required materials exist for a phase before starting.
+ */
+taskRoutes.get('/:id/check-phase/:phase', async (c) => {
+  const service = new TaskService(c.env as Bindings);
+  const phase = c.req.param('phase') as any;
+
+  const validPhases = ['SCENE_GEN', 'ASSET_MATCH', 'REMOTION_RENDER', 'TTS_COMPOSE'];
+  if (!validPhases.includes(phase)) {
+    return c.json({ code: 400, data: null, msg: 'Invalid phase' }, 400);
+  }
+
+  try {
+    const result = await service.checkPhaseMaterials(c.req.param('id'), phase);
+    return c.json({ code: 200, data: result, msg: 'success' });
+  } catch (error) {
+    console.error('Material check error:', error);
+    return c.json({ code: 500, data: null, msg: 'Check failed: ' + (error as Error).message }, 500);
+  }
+});
+
+/**
+ * Re-render specific scene clips for a task.
+ * Body: { scene_ids: number[], images?: { [sceneId]: path }, types?: { [sceneId]: type } }
+ */
+taskRoutes.post('/:id/rerender-clips', async (c) => {
+  const service = new TaskService(c.env as Bindings);
+
+  try {
+    const body = await c.req.json();
+    const { scene_ids, images, types } = body;
+
+    if (!scene_ids || !Array.isArray(scene_ids) || scene_ids.length === 0) {
+      return c.json({ code: 400, data: null, msg: 'Missing or invalid scene_ids' }, 400);
+    }
+
+    const result = await service.rerenderClips(
+      c.req.param('id'),
+      scene_ids.map(Number),
+      images,
+      types,
+    );
+
+    if (!result) {
+      return c.json({ code: 400, data: null, msg: 'Failed to re-render clips' }, 400);
+    }
+
+    return c.json({ code: 200, data: result, msg: 'Re-render triggered successfully' });
+  } catch (error) {
+    console.error('Failed to re-render clips:', error);
+    return c.json({ code: 500, data: null, msg: 'Failed to re-render clips: ' + (error as Error).message }, 500);
+  }
+});
+
 export { taskRoutes };

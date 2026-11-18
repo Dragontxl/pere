@@ -496,6 +496,142 @@ def load_phase_artifact(
     return None
 
 
+def download_clips_from_r2(
+    work_dir: Path,
+    task_id: str | None,
+    r2_prefix: str | None,
+    r2_config: dict | None,
+) -> int:
+    """从 R2 下载已有的 final_clip 片段到工作目录，用于片段缓存复用
+
+    在重渲染或从后续阶段开始执行时，将之前生成的片段从 R2 下载到本地，
+    避免重复渲染未改变的片段。
+
+    Args:
+        work_dir: 本地工作目录
+        task_id: 任务ID
+        r2_prefix: R2 前缀
+        r2_config: R2 配置
+
+    Returns:
+        成功下载的片段数量
+    """
+    if not task_id or not r2_prefix or not r2_config:
+        return 0
+
+    try:
+        # 列出 R2 下所有 final_clip_*.mp4 文件
+        endpoint = r2_config["endpoint"].rstrip("/")
+        bucket = r2_config["bucket"]
+        access_key = r2_config["access_key_id"]
+        secret_key = r2_config["secret_access_key"]
+
+        downloaded = 0
+        cursor: str | None = None
+
+        while True:
+            options = {"prefix": f"{r2_prefix}/final_clip_", "limit": 1000}
+            if cursor:
+                options["cursor"] = cursor
+
+            import urllib.request
+            import json as _json
+
+            # 使用 AWS Signature V4 签名请求 R2（兼容 S3 API）
+            # 简化方案：使用 wrangler CLI 列出对象
+            list_cmd = [
+                "npx", "--yes", "wrangler", "r2", "object", "list",
+                f"{bucket}/{r2_prefix}/",
+                "--remote",
+            ]
+            result = subprocess.run(
+                list_cmd,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+
+            if result.returncode != 0:
+                print(f"  ⚠️ R2 列出对象失败: {result.stderr}")
+                return 0
+
+            # wrangler r2 object list 输出为 JSON
+            try:
+                objects = _json.loads(result.stdout)
+                if not isinstance(objects, list):
+                    return 0
+            except (json.JSONDecodeError, ValueError):
+                return 0
+
+            clip_files = [
+                obj for obj in objects
+                if isinstance(obj, dict) and obj.get("key", "").endswith(".mp4")
+                and "final_clip_" in obj.get("key", "")
+            ]
+
+            for obj in clip_files:
+                clip_key = obj["key"]
+                local_path = work_dir / os.path.basename(clip_key)
+
+                if local_path.exists():
+                    continue  # 已存在，跳过
+
+                download_cmd = [
+                    "npx", "--yes", "wrangler", "r2", "object", "get",
+                    f"{bucket}/{clip_key}",
+                    "--file", str(local_path),
+                    "--remote",
+                ]
+                dl_result = subprocess.run(
+                    download_cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+                if dl_result.returncode == 0 and local_path.exists():
+                    downloaded += 1
+                    print(f"  📥 下载缓存片段: {os.path.basename(clip_key)}")
+                else:
+                    print(f"  ⚠️ 下载缓存片段失败: {clip_key} - {dl_result.stderr}")
+
+            break  # wrangler list 不支持分页游标，一次性获取
+
+        return downloaded
+    except Exception as e:
+        print(f"  ⚠️ 下载缓存片段异常: {e}")
+        return 0
+
+
+def save_clip_to_r2(
+    clip_path: str,
+    r2_key: str,
+    r2_config: dict | None,
+) -> bool:
+    """将单个视频片段上传到 R2，供后续重渲染或阶段执行时缓存复用
+
+    Args:
+        clip_path: 本地片段路径
+        r2_key: R2 对象键
+        r2_config: R2 配置
+
+    Returns:
+        是否成功
+    """
+    if not r2_config:
+        return False
+
+    if not os.path.exists(clip_path):
+        return False
+
+    return upload_to_r2(
+        clip_path, r2_key,
+        r2_config["bucket"],
+        r2_config["access_key_id"],
+        r2_config["secret_access_key"],
+        r2_config["endpoint"],
+    )
+
+
 def get_article(client, config: dict, model: str) -> str:
     """获取文章，根据参数选择方式
 
@@ -518,7 +654,7 @@ def get_article(client, config: dict, model: str) -> str:
         return select_and_get_article(client, model)
 
 
-def download_and_match(scenes: list, zhipu_client, config: dict, temp_dir: Path, work_dir: Path, agnes_client=None, model: str = "agnes-3.0-flash") -> dict:
+def download_and_match(scenes: list, zhipu_client, config: dict, temp_dir: Path, work_dir: Path, agnes_client=None, model: str = "agnes-3.0-flash", progress_cb=None) -> dict:
     """环节3：为每个镜头下载候选图片并做匹配分析
 
     Args:
@@ -529,6 +665,7 @@ def download_and_match(scenes: list, zhipu_client, config: dict, temp_dir: Path,
         work_dir: 工作目录
         agnes_client: Agnes客户端（用于中文关键词翻译为英文）
         model: Agnes模型名称
+        progress_cb: 进度回调函数，签名 (phase, message, processed, total)
 
     Returns:
         {scene_id: [{"path":..., "score":...}, ...]}
@@ -628,6 +765,10 @@ def download_and_match(scenes: list, zhipu_client, config: dict, temp_dir: Path,
                 print(f"    ⚠️ 使用第一张图片（无 CLIP 匹配）")
 
             match_results[scene.scene_id] = matches
+
+            # 报告逐镜头进度
+            if progress_cb:
+                progress_cb("ASSET_MATCH", f"镜头 {scene.scene_id} 素材匹配完成", scene.scene_id, len(scenes))
 
     finally:
         # 关闭共享 Selenium 会话
@@ -954,6 +1095,12 @@ def _render_single_scene(
     if seg_duration <= 0:
         seg_duration = scene.duration
 
+    # 片段缓存：如果最终片段已存在（从之前的渲染或 R2 下载），直接复用
+    # 避免重复渲染未改变的场景，节省时间和 API 调用
+    if final_clip_path.exists() and final_clip_path.stat().st_size > 0:
+        print(f"  ♻️ 镜头 {scene.scene_id} 段{seg_idx}: 复用已缓存片段")
+        return scene, str(final_clip_path)
+
     # 选取背景图片：优先用决策的 asset_path，回退到匹配结果第一张
     # Remotion 片段将以此照片为背景，消除与图片片段的风格割裂
     bg_image = decision.asset_path
@@ -1263,6 +1410,18 @@ def rerender_clips(work_dir, config: dict, render_params: dict, args) -> str:
     with open(match_path, "r", encoding="utf-8") as f:
         match_results = json.load(f)
 
+    # 从 R2 下载已有的缓存片段（非目标场景的片段），避免在 CI 中丢失
+    if args.r2_bucket and args.r2_access_key_id and args.r2_secret_access_key and args.r2_endpoint and args.r2_prefix:
+        r2_config = {
+            "bucket": args.r2_bucket,
+            "access_key_id": args.r2_access_key_id,
+            "secret_access_key": args.r2_secret_access_key,
+            "endpoint": args.r2_endpoint,
+        }
+        cached = download_clips_from_r2(work_dir, args.task_id, args.r2_prefix, r2_config)
+        if cached > 0:
+            print(f"📥 从 R2 下载 {cached} 个缓存片段（非目标场景将复用）")
+
     # 解析目标场景 ID
     target_ids = _parse_scene_ids(args.rerender_clips)
     print(f"🔁 重新渲染场景: {sorted(target_ids)}（共 {len(target_ids)} 个）")
@@ -1405,6 +1564,19 @@ def rerender_clips(work_dir, config: dict, render_params: dict, args) -> str:
     else:
         print(f"  ✅ 全部 {success_count} 段渲染完成")
 
+    # 将新渲染的片段上传到 R2 供后续缓存复用
+    if args.r2_bucket and args.r2_access_key_id and args.r2_secret_access_key and args.r2_endpoint and args.r2_prefix:
+        r2_config = {
+            "bucket": args.r2_bucket,
+            "access_key_id": args.r2_access_key_id,
+            "secret_access_key": args.r2_secret_access_key,
+            "endpoint": args.r2_endpoint,
+        }
+        for (scene_id, seg_idx), (_, clip_path) in results_by_scene.items():
+            if clip_path and os.path.exists(clip_path):
+                r2_clip_key = f"{args.r2_prefix}/{os.path.basename(clip_path)}"
+                save_clip_to_r2(clip_path, r2_clip_key, r2_config)
+
     # 清理音频段临时文件
     for segments in audio_segments.values():
         for seg_path, _, _ in segments:
@@ -1432,7 +1604,11 @@ def compose_video(
     match_results: dict,
     config: dict,
     render_params: dict,
-    work_dir: Path
+    work_dir: Path,
+    progress_cb=None,
+    r2_prefix: str | None = None,
+    r2_config: dict | None = None,
+    task_id: str | None = None,
 ) -> str:
     """环节6：合成最终视频
 
@@ -1443,6 +1619,10 @@ def compose_video(
         config: 全局配置
         render_params: 渲染参数
         work_dir: 工作目录
+        progress_cb: 进度回调函数，签名 (phase, message, processed, total)
+        r2_prefix: R2 前缀（用于保存片段到 R2 供缓存复用）
+        r2_config: R2 配置
+        task_id: 任务ID
 
     Returns:
         最终视频路径
@@ -1485,6 +1665,9 @@ def compose_video(
                 elif segments and segments[0][1] <= 0:
                     print(f"  ⚠️ 镜头 {scene.scene_id} 语音合成失败，"
                           f"按 {scene.duration:.1f}s 渲染（无解说音轨）")
+
+                if progress_cb:
+                    progress_cb("TTS_COMPOSE", f"镜头 {scene.scene_id} 语音合成完成", done, len(scenes))
 
                 if done % 10 == 0 or done == len(scenes):
                     print(f"  🎙️ 语音进度 {done}/{len(scenes)}")
@@ -1543,8 +1726,28 @@ def compose_video(
                 if result:
                     rendered_scene, clip_path = result
                     results_by_scene[(scene.scene_id, seg_idx)] = (rendered_scene, clip_path)
+
+                    # 保存片段到 R2 供缓存复用
+                    if clip_path and r2_prefix and r2_config and task_id:
+                        r2_clip_key = f"{r2_prefix}/{os.path.basename(clip_path)}"
+                        save_clip_to_r2(clip_path, r2_clip_key, r2_config)
+
+                    if progress_cb:
+                        rendered_count = len(results_by_scene)
+                        total_expected = sum(
+                            len(segs) if segs else 1
+                            for segs in audio_segments.values()
+                        )
+                        progress_cb(
+                            "TTS_COMPOSE",
+                            f"镜头 {rendered_scene.scene_id} 段{seg_idx} 渲染完成",
+                            rendered_count,
+                            total_expected,
+                        )
             except Exception as e:
                 print(f"  ❌ 镜头 {scene.scene_id} 段{seg_idx}: 渲染失败: {e}")
+                if progress_cb:
+                    progress_cb("TTS_COMPOSE", f"镜头 {scene.scene_id} 段{seg_idx} 渲染失败", 0, len(scenes))
 
     # 按场景顺序、段顺序排列，确保拼接顺序正确
     for scene in scenes:
@@ -1666,6 +1869,38 @@ def main():
         try:
             final_output = rerender_clips(work_dir, config, render_params, args)
 
+            # 上传最终视频到 R2
+            if final_output and args.r2_bucket and args.r2_access_key_id and args.r2_secret_access_key and args.r2_endpoint and args.r2_prefix:
+                r2_config = {
+                    "bucket": args.r2_bucket,
+                    "access_key_id": args.r2_access_key_id,
+                    "secret_access_key": args.r2_secret_access_key,
+                    "endpoint": args.r2_endpoint,
+                }
+                r2_video_key = f"{args.r2_prefix}/final_output.mp4"
+                upload_to_r2(
+                    final_output, r2_video_key,
+                    r2_config["bucket"],
+                    r2_config["access_key_id"],
+                    r2_config["secret_access_key"],
+                    r2_config["endpoint"],
+                )
+
+            # 发送完成回调
+            if args.task_id:
+                send_callback(
+                    {
+                        "task_id": args.task_id,
+                        "phase": "TTS_COMPOSE",
+                        "status": "completed",
+                        "message": "重渲染完成",
+                        "final_video_key": f"{args.r2_prefix}/final_output.mp4" if (args.r2_bucket and args.r2_prefix) else "final_output.mp4",
+                        "final_video_url": f"{args.r2_prefix}/final_output.mp4" if (args.r2_bucket and args.r2_prefix) else None,
+                    },
+                    args.callback_url,
+                    args.callback_secret,
+                )
+
             print(f"\n{'=' * 60}")
             print(f"✅ 重渲染完成！")
             print(f"📁 输出文件: {final_output}")
@@ -1767,6 +2002,8 @@ def main():
             scenes = generate_scenes_from_chunks(chunks, client, model)
             print(f"✅ 生成 {len(scenes)} 个镜头")
 
+            _cb_progress("SCENE_GEN", f"已生成 {len(scenes)} 个分镜镜头", len(scenes), len(scenes))
+
             # 保存分镜
             scenes_path = work_dir / "scenes.json"
             with open(scenes_path, "w", encoding="utf-8") as f:
@@ -1802,7 +2039,8 @@ def main():
             # 环节3：素材下载与匹配
             print("\n[3/6] 下载并匹配图片素材...")
             match_results = download_and_match(
-                scenes, zhipu_client, config, temp_dir, work_dir
+                scenes, zhipu_client, config, temp_dir, work_dir,
+                progress_cb=_cb_progress
             )
 
             # 保存匹配结果
@@ -1845,6 +2083,8 @@ def main():
             for dec in decisions:
                 print(f"  镜头 {dec.scene_id}: {dec.implementation} — {dec.reason}")
 
+            _cb_progress("REMOTION_RENDER", f"已分析 {len(decisions)} 个镜头的 Remotion 适用性", len(decisions), len(decisions))
+
             # 保存决策
             decisions_path = work_dir / "decisions.json"
             with open(decisions_path, "w", encoding="utf-8") as f:
@@ -1882,11 +2122,24 @@ def main():
         final_output = None
         if start_idx <= 3:
             _cb_progress("TTS_COMPOSE", "开始合成语音和视频")
+
+            # 下载已有的缓存片段（从 R2），避免重复渲染
+            if r2_config and args.task_id and args.r2_prefix:
+                cached = download_clips_from_r2(
+                    work_dir, args.task_id, args.r2_prefix, r2_config
+                )
+                if cached > 0:
+                    print(f"  ♻️ 从 R2 下载 {cached} 个缓存片段，将复用")
+
             # 环节6：合成视频
             print("\n[6/6] 合成视频...")
             final_output = compose_video(
                 scenes, decisions, match_results,
-                config, render_params, work_dir
+                config, render_params, work_dir,
+                progress_cb=_cb_progress,
+                r2_prefix=args.r2_prefix,
+                r2_config=r2_config,
+                task_id=args.task_id,
             )
 
             # 上传最终视频到 R2

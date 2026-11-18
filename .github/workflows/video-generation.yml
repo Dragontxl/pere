@@ -129,6 +129,9 @@ jobs:
             $bgm_key = $payload.bgm_key
             $start_phase = $payload.start_phase
             $end_phase = $payload.end_phase
+            $rerender_clips = $payload.rerender_clips
+            $rerender_image = $payload.rerender_image
+            $rerender_type = $payload.rerender_type
           } else {
             $task_id = "${{ inputs.task_id }}"
             $article_source = "pasted"
@@ -140,6 +143,9 @@ jobs:
             $bgm_key = ""
             $start_phase = "${{ inputs.start_phase }}"
             $end_phase = "${{ inputs.end_phase }}"
+            $rerender_clips = ""
+            $rerender_image = @()
+            $rerender_type = @()
           }
 
           # 缺省值兜底
@@ -149,10 +155,14 @@ jobs:
           if (-not $start_phase) { $start_phase = "SCENE_GEN" }
           if (-not $end_phase) { $end_phase = "TTS_COMPOSE" }
           if (-not $bgm_key) { $bgm_key = "" }
+          if (-not $rerender_clips) { $rerender_clips = "" }
+          if (-not $rerender_image) { $rerender_image = @() }
+          if (-not $rerender_type) { $rerender_type = @() }
           if ("$enable_subtitle" -match '^(?i)false$') { $enable_subtitle = "false" } else { $enable_subtitle = "true" }
           $article_content = [string]$article_content
           $article_file_key = [string]$article_file_key
           $bgm_key = [string]$bgm_key
+          $rerender_clips = [string]$rerender_clips
 
           # 写入环境变量供后续步骤使用（文章正文可能是多行，必须用分隔符语法）
           Add-Content -Path $env:GITHUB_ENV -Value "TASK_ID=$task_id"
@@ -168,6 +178,7 @@ jobs:
           Add-Content -Path $env:GITHUB_ENV -Value "BGM_KEY=$bgm_key"
           Add-Content -Path $env:GITHUB_ENV -Value "START_PHASE=$start_phase"
           Add-Content -Path $env:GITHUB_ENV -Value "END_PHASE=$end_phase"
+          Add-Content -Path $env:GITHUB_ENV -Value "RERENDER_CLIPS=$rerender_clips"
 
           $phase_order = @('SCENE_GEN', 'ASSET_MATCH', 'REMOTION_RENDER', 'TTS_COMPOSE')
           $start_idx = [array]::IndexOf($phase_order, $start_phase)
@@ -292,6 +303,24 @@ jobs:
 
           if ($env:ENABLE_SUBTITLE -eq "false") {
             $cmd += @("--no-subtitle")
+          }
+
+          if ($env:RERENDER_CLIPS -ne "") {
+            $cmd += @("--rerender-clips", $env:RERENDER_CLIPS)
+          }
+
+          # Rerender image overrides (array from payload)
+          if ($rerender_image -and $rerender_image.Count -gt 0) {
+            foreach ($img in $rerender_image) {
+              $cmd += @("--rerender-image", $img)
+            }
+          }
+
+          # Rerender type overrides (array from payload)
+          if ($rerender_type -and $rerender_type.Count -gt 0) {
+            foreach ($tp in $rerender_type) {
+              $cmd += @("--rerender-type", $tp)
+            }
           }
 
           if ($env:BGM_KEY -ne "") {

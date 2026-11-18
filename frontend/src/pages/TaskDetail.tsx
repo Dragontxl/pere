@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { taskApi, fileApi } from '../api/client';
-import type { Task, TaskLog, TaskPhase } from '../types';
+import type { Task, TaskLog, TaskPhase, PhaseMaterialCheck } from '../types';
 import { statusLabels, phaseLabels, phaseOrder } from '../types';
 import ProgressBar from '../components/ProgressBar';
 
@@ -13,6 +13,18 @@ export default function TaskDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Phase control state
+  const [rangeStart, setRangeStart] = useState<string>('');
+  const [rangeEnd, setRangeEnd] = useState<string>('');
+  const [materialChecks, setMaterialChecks] = useState<Record<string, PhaseMaterialCheck | null>>({});
+  const [checkingPhase, setCheckingPhase] = useState<string | null>(null);
+
+  // Re-render clips state
+  const [rerenderScenes, setRerenderScenes] = useState('');
+  const [rerenderImages, setRerenderImages] = useState('');
+  const [rerenderTypes, setRerenderTypes] = useState('');
+  const [rerendering, setRerendering] = useState(false);
 
   const fetchTask = useCallback(async () => {
     if (!id) return;
@@ -83,12 +95,99 @@ export default function TaskDetail() {
 
   const handleDelete = async () => {
     if (!task) return;
-    if (!confirm('确定要删除此任务吗？相关的视频文件也将被删除。')) return;
+    if (!confirm('确定要删除此任务吗？相关的视频文件和 R2 存储目录也将被一并删除，此操作不可撤销。')) return;
     try {
       await taskApi.delete(task.id);
       navigate('/');
     } catch (err) {
       alert(err instanceof Error ? err.message : '删除失败');
+    }
+  };
+
+  // Phase control handlers
+  const handleCheckMaterial = async (phase: string) => {
+    if (!id) return;
+    setCheckingPhase(phase);
+    try {
+      const result = await taskApi.checkPhase(id, phase);
+      setMaterialChecks((prev) => ({ ...prev, [phase]: result }));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '素材检查失败');
+    } finally {
+      setCheckingPhase(null);
+    }
+  };
+
+  const handleStartPhase = async (phase: string) => {
+    if (!id || !task) return;
+    const startPhase = rangeStart || undefined;
+    const endPhase = rangeEnd || undefined;
+    try {
+      await taskApi.startPhase(id, phase, startPhase, endPhase);
+      alert(`阶段 ${phaseLabels[phase as TaskPhase]} 已启动`);
+      fetchTask();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '启动阶段失败');
+    }
+  };
+
+  // Re-render clips handler
+  const handleRerender = async () => {
+    if (!id || !task) return;
+    if (!rerenderScenes.trim()) {
+      alert('请输入要重渲染的场景 ID（如 3,7,12 或 3-7）');
+      return;
+    }
+
+    // Parse scene IDs
+    const ids = new Set<number>();
+    for (const part of rerenderScenes.split(',')) {
+      const trimmed = part.trim();
+      if (!trimmed) continue;
+      if (trimmed.includes('-')) {
+        const [start, end] = trimmed.split('-').map(Number);
+        for (let i = start; i <= end; i++) ids.add(i);
+      } else {
+        ids.add(Number(trimmed));
+      }
+    }
+
+    if (ids.size === 0) {
+      alert('无法解析场景 ID');
+      return;
+    }
+
+    // Parse image overrides
+    const images: Record<number, string> = {};
+    if (rerenderImages.trim()) {
+      for (const spec of rerenderImages.split(';')) {
+        const [sceneId, path] = spec.split(':').map(s => s.trim());
+        if (sceneId && path) {
+          images[Number(sceneId)] = path;
+        }
+      }
+    }
+
+    // Parse type overrides
+    const types: Record<number, string> = {};
+    if (rerenderTypes.trim()) {
+      for (const spec of rerenderTypes.split(';')) {
+        const [sceneId, type] = spec.split(':').map(s => s.trim());
+        if (sceneId && type) {
+          types[Number(sceneId)] = type;
+        }
+      }
+    }
+
+    setRerendering(true);
+    try {
+      await taskApi.rerenderClips(id, Array.from(ids), images, types);
+      alert(`已触发重渲染 ${ids.size} 个场景`);
+      fetchTask();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '重渲染失败');
+    } finally {
+      setRerendering(false);
     }
   };
 
@@ -99,6 +198,14 @@ export default function TaskDetail() {
     } catch {
       return dateStr;
     }
+  };
+
+  const formatSize = (bytes: number): string => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   };
 
   if (loading) {
@@ -121,6 +228,8 @@ export default function TaskDetail() {
   const videoUrl = task.final_video_key
     ? fileApi.getNoCacheUrl(task.final_video_key)
     : null;
+
+  const isTerminal = isCompleted || isFailed || task.status === 'CANCELLED';
 
   return (
     <div className="page-container">
@@ -154,35 +263,156 @@ export default function TaskDetail() {
       {error && task.error_msg && <div className="alert alert-error">错误：{task.error_msg}</div>}
 
       <div className="detail-grid">
-        {/* Left: Progress */}
+        {/* Left: Progress & Controls */}
         <div className="detail-main">
+          {/* Progress monitoring */}
           <div className="card">
             <h2 className="card-title">进度监控</h2>
-            <ProgressBar currentPhase={task.current_phase} progress={task.progress} />
+            <ProgressBar
+              currentPhase={task.current_phase}
+              progress={task.progress}
+              processedFrames={task.processed_frames}
+              totalFrames={task.total_frames}
+              failedFrames={task.failed_frames}
+              phaseDetails={task.phase_details}
+            />
+          </div>
 
-            {/* Phase detail */}
-            <div className="phase-detail">
+          {/* Phase control panel */}
+          <div className="card">
+            <h2 className="card-title">阶段控制</h2>
+
+            {/* Range execution selector */}
+            <div className="range-selector">
+              <div className="range-input-group">
+                <label className="range-label">起始阶段</label>
+                <select
+                  className="range-select"
+                  value={rangeStart}
+                  onChange={(e) => setRangeStart(e.target.value)}
+                >
+                  <option value="">（单阶段）</option>
+                  {phaseOrder.map((p) => (
+                    <option key={p} value={p}>{phaseLabels[p]}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="range-input-group">
+                <label className="range-label">结束阶段</label>
+                <select
+                  className="range-select"
+                  value={rangeEnd}
+                  onChange={(e) => setRangeEnd(e.target.value)}
+                >
+                  <option value="">（单阶段）</option>
+                  {phaseOrder.map((p) => (
+                    <option key={p} value={p}>{phaseLabels[p]}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Phase list with controls */}
+            <div className="phase-control-list">
               {phaseOrder.map((phase) => {
+                const currentIndex = task.current_phase ? phaseOrder.indexOf(task.current_phase as TaskPhase) : -1;
+                const phaseIndex = phaseOrder.indexOf(phase);
                 const isCurrent = task.current_phase === phase;
-                const phaseDone =
-                  task.status === 'COMPLETED' ||
-                  (task.current_phase && phaseOrder.indexOf(task.current_phase as TaskPhase) > phaseOrder.indexOf(phase));
+                const isDone = isCompleted || (currentIndex >= 0 && currentIndex > phaseIndex);
+                const check = materialChecks[phase];
 
                 return (
                   <div
                     key={phase}
-                    className={`phase-item ${isCurrent ? 'current' : ''} ${phaseDone ? 'done' : ''}`}
+                    className={`phase-control-item ${isCurrent ? 'current' : ''} ${isDone ? 'done' : ''}`}
                   >
-                    <div className="phase-item-header">
-                      <span className={`phase-dot ${isCurrent ? 'active' : ''} ${phaseDone ? 'done' : ''}`} />
-                      <span className="phase-item-name">{phaseLabels[phase]}</span>
-                      <span className="phase-item-status">
-                        {phaseDone ? '已完成' : isCurrent ? '进行中' : '等待中'}
+                    <div className="phase-control-header">
+                      <span className={`phase-dot ${isCurrent ? 'active' : ''} ${isDone ? 'done' : ''}`} />
+                      <span className="phase-control-name">{phaseLabels[phase]}</span>
+                      <span className="phase-control-status">
+                        {isDone ? '✅ 已完成' : isCurrent ? '🔄 进行中' : '⏸ 等待中'}
                       </span>
+                    </div>
+
+                    {/* Material check result */}
+                    {check && (
+                      <div className={`material-check ${check.ready ? 'ready' : 'missing'}`}>
+                        {check.ready ? (
+                          <span>✅ 素材齐全</span>
+                        ) : (
+                          <span>❌ 缺少: {check.missing.join(', ')}</span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Action buttons */}
+                    <div className="phase-control-actions">
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => handleCheckMaterial(phase)}
+                        disabled={checkingPhase === phase}
+                      >
+                        {checkingPhase === phase ? '检查中...' : '检查素材'}
+                      </button>
+                      <button
+                        className="btn btn-primary btn-sm"
+                        onClick={() => handleStartPhase(phase)}
+                        disabled={!isTerminal && !isDone && !isCurrent}
+                        title={isTerminal ? '启动此阶段' : isDone ? '跳过已完成阶段' : '需等待当前阶段完成'}
+                      >
+                        启动
+                      </button>
                     </div>
                   </div>
                 );
               })}
+            </div>
+          </div>
+
+          {/* Re-render clips */}
+          <div className="card">
+            <h2 className="card-title">片段重渲染</h2>
+            <p className="card-hint">
+              重新渲染指定场景的片段并重新拼接。未指定的场景将复用已缓存的片段。
+            </p>
+            <div className="rerender-form">
+              <div className="form-group">
+                <label className="form-label">场景 ID</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="如 3,7,12 或 3-7"
+                  value={rerenderScenes}
+                  onChange={(e) => setRerenderScenes(e.target.value)}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">替换素材（可选，格式 scene_id:path，多个用 ; 分隔）</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="如 5:/path/img.jpg"
+                  value={rerenderImages}
+                  onChange={(e) => setRerenderImages(e.target.value)}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">修改类型（可选，格式 scene_id:type，多个用 ; 分隔）</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="如 8:data_visual"
+                  value={rerenderTypes}
+                  onChange={(e) => setRerenderTypes(e.target.value)}
+                />
+              </div>
+              <button
+                className="btn btn-primary"
+                onClick={handleRerender}
+                disabled={rerendering}
+              >
+                {rerendering ? '重渲染中...' : '重渲染片段'}
+              </button>
             </div>
           </div>
 
@@ -250,6 +480,22 @@ export default function TaskDetail() {
               <div className="info-item">
                 <span className="info-label">进度</span>
                 <span className="info-value">{task.progress}%</span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">片段计数</span>
+                <span className="info-value">
+                  {task.processed_frames}/{task.total_frames}
+                  {task.failed_frames > 0 && `（失败 ${task.failed_frames}）`}
+                </span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">阶段范围</span>
+                <span className="info-value">
+                  {task.start_phase || task.current_phase || '—'}
+                  {task.start_phase && task.end_phase && task.start_phase !== task.end_phase
+                    ? ` → ${task.end_phase}`
+                    : ''}
+                </span>
               </div>
               <div className="info-item">
                 <span className="info-label">重试次数</span>

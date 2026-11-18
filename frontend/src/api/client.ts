@@ -1,4 +1,4 @@
-import type { ApiResponse, Task, TaskLog, LoginResponse, BgmOption } from '../types';
+import type { ApiResponse, Task, TaskLog, LoginResponse, BgmOption, PhaseMaterialCheck, FileListResult, FileStats } from '../types';
 
 const API_BASE = '/api/v1';
 
@@ -123,7 +123,47 @@ export const taskApi = {
   async getLogs(id: string): Promise<TaskLog[]> {
     return request<TaskLog[]>(`/tasks/${id}/logs`);
   },
+
+  // 分阶段执行
+  async startPhase(
+    id: string,
+    phase: string,
+    startPhase?: string,
+    endPhase?: string,
+  ): Promise<Task> {
+    const body: Record<string, string> = {};
+    if (startPhase) body.start_phase = startPhase;
+    if (endPhase) body.end_phase = endPhase;
+    return request<Task>(`/tasks/${id}/start-phase/${phase}`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  },
+
+  // 素材检查
+  async checkPhase(id: string, phase: string): Promise<PhaseMaterialCheck> {
+    return request<PhaseMaterialCheck>(`/tasks/${id}/check-phase/${phase}`);
+  },
+
+  // 重渲染指定场景
+  async rerenderClips(
+    id: string,
+    sceneIds: number[],
+    images?: Record<number, string>,
+    types?: Record<number, string>,
+  ): Promise<Task> {
+    return request<Task>(`/tasks/${id}/rerender-clips`, {
+      method: 'POST',
+      body: JSON.stringify({
+        scene_ids: sceneIds,
+        images,
+        types,
+      }),
+    });
+  },
 };
+
+// ── Admin File Management ──────────────────────────────────────────────
 
 // ── Files ──────────────────────────────────────────────────────────────
 
@@ -172,6 +212,85 @@ export const fileApi = {
     }
 
     return data.data;
+  },
+
+  // ── 文件管理（管理员）─────────────────────────────────────────────
+
+  /**
+   * 列出 R2 文件（支持文件夹结构）
+   */
+  async list(prefix = '', cursor?: string): Promise<FileListResult> {
+    const query = new URLSearchParams({ prefix });
+    if (cursor) query.set('cursor', cursor);
+    return request<FileListResult>(`/admin/files/list?${query.toString()}`);
+  },
+
+  /**
+   * 删除文件或文件夹
+   */
+  async delete(key: string, isDirectory = false): Promise<void> {
+    await request<null>('/admin/files/delete', {
+      method: 'POST',
+      body: JSON.stringify({ key, is_directory: isDirectory }),
+    });
+  },
+
+  /**
+   * 批量删除
+   */
+  async batchDelete(keys: string[]): Promise<{ deleted: number; errors: string[] }> {
+    return request<{ deleted: number; errors: string[] }>('/admin/files/batch-delete', {
+      method: 'POST',
+      body: JSON.stringify({ keys }),
+    });
+  },
+
+  /**
+   * 创建文件夹
+   */
+  async createFolder(key: string): Promise<{ key: string }> {
+    return request<{ key: string }>('/admin/files/create-folder', {
+      method: 'POST',
+      body: JSON.stringify({ key }),
+    });
+  },
+
+  /**
+   * 批量上传文件（JSON + base64）
+   */
+  async batchUpload(
+    files: Array<{ filename: string; content: string; contentType?: string }>,
+    prefix = '',
+  ): Promise<{ uploaded: Array<{ key: string; size: number; filename: string }>; errors: string[] }> {
+    return request<{ uploaded: Array<{ key: string; size: number; filename: string }>; errors: string[] }>(
+      '/admin/files/batch-upload',
+      {
+        method: 'POST',
+        body: JSON.stringify({ files, prefix }),
+      },
+    );
+  },
+
+  /**
+   * 获取存储统计
+   */
+  async stats(prefix = ''): Promise<FileStats> {
+    const query = new URLSearchParams({ prefix });
+    return request<FileStats>(`/admin/files/stats?${query.toString()}`);
+  },
+
+  /**
+   * 获取管理端文件预览 URL（带 Range 支持）
+   */
+  getAdminPreviewUrl(key: string): string {
+    return `${API_BASE}/admin/files/preview/${encodeURIComponent(key.split('/').pop() || key)}?prefix=${encodeURIComponent(key.includes('/') ? key.substring(0, key.lastIndexOf('/') + 1) : '')}`;
+  },
+
+  /**
+   * 获取管理端下载 URL
+   */
+  getAdminDownloadUrl(key: string): string {
+    return `${API_BASE}/admin/files/download/${encodeURIComponent(key.split('/').pop() || key)}?prefix=${encodeURIComponent(key.includes('/') ? key.substring(0, key.lastIndexOf('/') + 1) : '')}`;
   },
 };
 

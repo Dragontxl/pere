@@ -43,6 +43,12 @@ export interface Task {
   max_retries: number;
   error_msg: string | null;
   status_message: string | null;
+  processed_frames: number;
+  total_frames: number;
+  failed_frames: number;
+  start_phase: string | null;
+  end_phase: string | null;
+  phase_details: string | null;
   created_at: string;
   updated_at: string;
   started_at: string | null;
@@ -108,3 +114,35 @@ export const statusLabels: Record<string, string> = {
   FAILED: '失败',
   CANCELLED: '已取消',
 };
+
+// 阶段素材检查结果
+export interface PhaseMaterialCheck {
+  ready: boolean;
+  missing: string[];
+  available: string[];
+}
+
+// R2 文件管理类型
+export interface FileItem {
+  key: string;
+  name: string;
+  type: 'file' | 'directory';
+  size: number;
+  lastModified: string | null;
+  contentType?: string;
+}
+
+export interface FileListResult {
+  files: FileItem[];
+  folders: FileItem[];
+  truncated: boolean;
+  cursor: string | null;
+  prefix: string;
+}
+
+export interface FileStats {
+  totalSize: number;
+  totalFiles: number;
+  totalSizeMB: string;
+  prefix: string;
+}
