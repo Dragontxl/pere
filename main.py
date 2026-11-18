@@ -1714,7 +1714,7 @@ def rerender_clips(work_dir, config: dict, render_params: dict, args) -> str:
                     resolution, fps, codec, audio_codec, preset, per_worker_threads,
                     args.skip_remotion,
                     None, scene.on_screen_text or "",
-                    enable_subtitle, 0, scene.duration,
+                    enable_subtitle, 0, scene.duration or max(2.0, min(10.0, len(scene.on_screen_text or "") / 5.2)),
                 )
                 futures[future] = (scene, 0)
             else:
@@ -1890,7 +1890,7 @@ def compose_video(
                     args.skip_remotion,
                     None, scene.on_screen_text or "",
                     enable_subtitle, 0,
-                    scene.duration
+                    scene.duration or max(2.0, min(10.0, len(scene.on_screen_text or "") / 5.2))
                 )
                 futures[future] = (scene, 0)
             else:
@@ -2102,11 +2102,14 @@ def prepare_render_artifacts(
     for scene in scenes:
         segs = audio_segments.get(scene.scene_id, [])
         if not segs:
+            # TTS 未生成音频段：用 scene.duration 兜底（若仍为 0 则按字数估算）
+            fallback_dur = scene.duration if scene.duration > 0 else max(2.0, min(10.0, len(scene.on_screen_text or "") / 5.2))
             clips.append({
                 "scene_id": scene.scene_id,
                 "seg_idx": 0,
                 "audio_file": None,
                 "subtitle": scene.on_screen_text or "",
+                "duration": fallback_dur,
             })
         else:
             for seg_idx, (seg_path, seg_dur, seg_subtitle) in enumerate(segs):
@@ -2115,6 +2118,7 @@ def prepare_render_artifacts(
                     "seg_idx": seg_idx,
                     "audio_file": os.path.basename(seg_path),
                     "subtitle": seg_subtitle,
+                    "duration": seg_dur,
                 })
 
     shard_count = args.render_shards or 4
@@ -2263,7 +2267,7 @@ def render_shard(
                 args.skip_remotion,
                 audio_seg_path, subtitle,
                 enable_subtitle, seg_idx,
-                scene.duration
+                clip.get("duration") or scene.duration or max(2.0, min(10.0, len(subtitle) / 5.2))
             )
             futures[future] = (scene_id, seg_idx, audio_file)
 
