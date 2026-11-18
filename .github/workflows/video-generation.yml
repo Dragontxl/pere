@@ -322,14 +322,13 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          # 上传 scenes.json、match_results.json、decisions.json、final_output.mp4 到 R2
+          # 上传 scenes.json、match_results.json、decisions.json 到 R2
           $prefix = "tasks/$env:TASK_ID"
 
           $filesToUpload = @(
             "output/scenes.json",
             "output/match_results.json",
-            "output/decisions.json",
-            "output/final_output.mp4"
+            "output/decisions.json"
           )
 
           foreach ($file in $filesToUpload) {
@@ -346,6 +345,24 @@ jobs:
             } else {
               Write-Warning "$file not found, skipping upload"
             }
+          }
+
+          # 上传最终视频：混合 BGM 后 main.py 会将 final_output.mp4 重命名为
+          # final_with_bgm.mp4，统一以 final_output.mp4 作为 R2 key，保证下载链接一致
+          $finalVideo = @(
+            "output/final_output.mp4",
+            "output/final_with_bgm.mp4"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+          if ($finalVideo) {
+            $r2Key = "$prefix/final_output.mp4"
+            Write-Host "Uploading $finalVideo -> $r2Key"
+            npx --yes wrangler r2 object put "$env:R2_BUCKET_NAME/$r2Key" --file $finalVideo --remote 2>&1
+            if ($LASTEXITCODE -ne 0) {
+              Write-Warning "Failed to upload final video to R2 (continuing)"
+            }
+          } else {
+            Write-Warning "No final video found, skipping upload"
           }
 
       - name: 发送进度回调
