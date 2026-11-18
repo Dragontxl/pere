@@ -859,5 +859,6 @@ pexel-remotion/                          # 本地目录（GitHub 仓库名：per
 | 阶段回调不区分「阶段进度」与「整段完成」 | workflow 进度回调没有 `start_phase/end_phase`，handler 无法区分，导致阶段一完成就触发下一阶段、阶段产物缺失 | 带 `start_phase/end_phase` 的是整段事件（走完成/推进逻辑），不带的只是 `main.py` 阶段进度（只更新进度/状态标签，不触发新 run） |
 | 单阶段串行不可行 | 图片素材只存在于当次 runner，换一次 checkout 后阶段 2/3 无素材可读 | 一次 GitHub run 跑完整管线 `SCENE_GEN → TTS_COMPOSE`，阶段进度由回调上报 |
 | 进度条末阶段显示「进行中」 | `ProgressBar` 在 `progress=100` 时把最后一个阶段判为 current，`isCurrent` 分支优先输出「进行中」 | `isCompleted` 时不再输出「进行中」，改输出「已完成」 |
+| 最终视频无法下载（404，key 为空） | `/files/nocache/*` 用路径通配符 `c.req.param('*')` 取 key，含斜杠的多段 key（`tasks/<id>/final_output.mp4`）在边缘运行时取到空串，`R2.get('')` 返回 404 | key 改从 query 参数 `?key=` 读取（与 `/version` 一致），并补上 Range 分片支持，视频预览/拖动/下载均可用 |
 
-当前状态：Worker / D1 / R2 / GitHub Actions 均已打通，创建任务即自动触发 `video-generation` workflow，一次 run 跑完整管线，任务详情页实时展示 4 阶段进度，最终视频落 R2 并可在线预览。
+当前状态：Worker / D1 / R2 / GitHub Actions 均已打通，创建任务即自动触发 `video-generation` workflow，一次 run 跑完整管线，任务详情页实时展示 4 阶段进度，最终视频落 R2 并可在线预览与下载。
