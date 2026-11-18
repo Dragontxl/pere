@@ -2322,12 +2322,15 @@ def main():
     if not agnes_api_key:
         agnes_api_key = os.environ.get("AGNES_API_KEY", "")
     agnes_base_url = config.get("agnes_api_base_url", "https://apihub.agnes-ai.com/v1")
-    if not agnes_api_key:
+    client = None
+    if agnes_api_key:
+        from core.agnes_client import AgnesClient
+        client = AgnesClient(base_url=agnes_base_url, api_key=agnes_api_key, timeout=180)
+    elif not (args.render_shard or args.assemble_mode):
         print("❌ 未配置 Agnes API Key，请在 config/settings.json 中设置 agnes_api_key")
         sys.exit(1)
-
-    from core.agnes_client import AgnesClient
-    client = AgnesClient(base_url=agnes_base_url, api_key=agnes_api_key, timeout=180)
+    else:
+        print("⚠️ 未配置 Agnes API Key，渲染分片/拼接模式不需要，继续")
 
     # 初始化智谱AI客户端（多模态评审）
     zhipu_api_key = config.get("zhipu_api_key", "")
