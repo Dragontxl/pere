@@ -276,56 +276,63 @@ publicFileRoutes.post('/purge', async (c) => {
  * 文件存储在 `bgm/` 前缀下，key 形如 `bgm/<uuid>-<filename>`。
  * 前端创建任务时将此 key 作为 `bgm_key` 传给后端，workflow 检测到 `bgm/`
  * 前缀后会从 R2 下载到本地再传给 main.py。
+ *
+ * 注意：Cloudflare Workers 环境下 multipart/form-data 的 Content-Type 会在
+ * 边缘被剥离，导致 `c.req.formData()` 不可用。因此使用 JSON + base64 传输。
  */
 publicFileRoutes.post('/upload', authMiddleware, async (c) => {
   const { R2 } = c.env as Bindings;
 
   try {
-    const formData = await c.req.formData();
-    const file = formData.get('file') as File | null;
+    const body = await c.req.json();
+    const { filename, content, contentType } = body as {
+      filename: string;
+      content: string; // base64 编码的文件内容
+      contentType?: string;
+    };
 
-    if (!file) {
-      return c.json({ code: 400, data: null, msg: '缺少文件' }, 400);
+    if (!filename || !content) {
+      return c.json({ code: 400, data: null, msg: '缺少 filename 或 content' }, 400);
     }
 
     // 校验文件类型：只接受音频
     const allowedTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg', 'audio/flac', 'audio/m4a', 'audio/aac', 'audio/x-m4a'];
-    const fileExt = file.name.toLowerCase().split('.').pop();
+    const fileExt = filename.toLowerCase().split('.').pop();
     const allowedExts = ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac'];
     const extOk = allowedExts.includes(fileExt || '');
-    const typeOk = !file.type || allowedTypes.includes(file.type) || file.type.startsWith('audio/');
+    const typeOk = !contentType || allowedTypes.includes(contentType) || contentType.startsWith('audio/');
 
     if (!extOk && !typeOk) {
       return c.json({ code: 400, data: null, msg: '只支持音频文件（mp3, wav, ogg, flac, m4a, aac）' }, 400);
     }
 
-    // 文件大小限制：50 MB
+    // 文件大小限制：50 MB（base64 解码后）
     const MAX_SIZE = 50 * 1024 * 1024;
-    if (file.size > MAX_SIZE) {
+    const decoded = Uint8Array.from(atob(content), (b) => b.charCodeAt(0));
+    if (decoded.byteLength > MAX_SIZE) {
       return c.json({ code: 400, data: null, msg: '文件大小不能超过 50MB' }, 400);
     }
 
     // 生成唯一 key：bgm/<uuid>-<filename>
     const uuid = crypto.randomUUID();
-    const safeName = file.name.replace(/[^\w.\-]/g, '_');
+    const safeName = filename.replace(/[^\w.\-]/g, '_');
     const key = `bgm/${uuid}-${safeName}`;
 
-    const arrayBuffer = await file.arrayBuffer();
-
-    await R2.put(key, arrayBuffer, {
+    await R2.put(key, decoded, {
       httpMetadata: {
-        contentType: file.type || 'audio/mpeg',
+        contentType: contentType || 'audio/mpeg',
       },
     });
 
     return c.json({
       code: 200,
-      data: { key, size: file.size, filename: file.name },
+      data: { key, size: decoded.byteLength, filename },
       msg: '上传成功',
     });
   } catch (error) {
     console.error('BGM upload error:', error);
-    return c.json({ code: 500, data: null, msg: '上传失败' }, 500);
+    const msg = error instanceof Error ? error.message : String(error);
+    return c.json({ code: 500, data: null, msg: `上传失败: ${msg}` }, 500);
   }
 });
 

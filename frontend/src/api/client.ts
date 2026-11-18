@@ -138,23 +138,27 @@ export const fileApi = {
 
   /**
    * 上传文件到 R2（用户级，JWT 认证）。
+   * 使用 JSON + base64 传输，避免 Cloudflare Workers 环境下
+   * multipart/form-data 的 Content-Type 在边缘被剥离的问题。
    * 返回 R2 key，前端将其作为 bgm_key 等传入创建任务。
    */
   async upload(file: File): Promise<{ key: string; size: number; filename: string }> {
-    const formData = new FormData();
-    formData.append('file', file);
+    // 将文件读取为 base64
+    const arrayBuffer = await file.arrayBuffer();
+    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
 
     const token = getAuthToken();
-    const headers: Record<string, string> = {};
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-    // 注意：不要设置 Content-Type，浏览器会自动设置 multipart/form-data + boundary
-
     const response = await fetch(`${API_BASE}/files/upload`, {
       method: 'POST',
-      headers,
-      body: formData,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        filename: file.name,
+        content: base64,
+        contentType: file.type || undefined,
+      }),
     });
 
     const data = await response.json() as ApiResponse<{ key: string; size: number; filename: string }>;

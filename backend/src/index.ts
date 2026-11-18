@@ -34,7 +34,6 @@ app.use('*', cors({
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   maxAge: 86400,
 }));
-
 app.use('*', prettyJSON());
 app.use('*', loggerMiddleware);
 app.use('*', errorHandler);
