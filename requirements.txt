@@ -1,5 +1,6 @@
 zhipuai>=2.0.0
 moviepy>=1.0.3
+imageio-ffmpeg>=0.4.7
 opencv-python>=4.8.0
 Pillow>=10.0.0
 selenium>=4.10.0

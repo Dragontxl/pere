@@ -85,6 +85,18 @@ jobs:
         run: |
           pip install -r requirements.txt
 
+      - name: 配置 ffmpeg 路径
+        shell: pwsh
+        run: |
+          # imageio-ffmpeg 自带 ffmpeg 二进制，通过环境变量让 Python 代码找到它
+          $ffmpegPath = python -c "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())"
+          if ($ffmpegPath) {
+            Add-Content -Path $env:GITHUB_ENV -Value "IMAGEIO_FFMPEG_EXE=$ffmpegPath"
+            Write-Host "ffmpeg: $ffmpegPath"
+          } else {
+            Write-Warning "imageio-ffmpeg not found, falling back to system ffmpeg"
+          }
+
       - name: 安装 Node.js 依赖
         run: |
           cd remotion && npm install
