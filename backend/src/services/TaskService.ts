@@ -571,7 +571,19 @@ export class TaskService {
     // ── Initialize / update current phase detail ────────────────────────────
     const currentDetail: Record<string, any> = phaseDetails[phase] || {};
     if (!currentDetail.started_at) {
-      currentDetail.started_at = nowISO;
+      // For tasks started before time-based progress was deployed, phase_details
+      // has no started_at. Estimate when the phase began based on current
+      // throughput so progress is reasonable from the first callback instead
+      // of jumping to ~0% (elapsed would be ~0 if we used nowISO).
+      const estTotal = totalCount || 0;
+      const estProcessed = processedCount || 0;
+      const estDuration = PHASE_STATIC_ESTIMATES[phase as TaskPhase] || 120_000;
+      if (estTotal > 0 && estProcessed > 0) {
+        const estimatedElapsed = estDuration * (estProcessed / estTotal);
+        currentDetail.started_at = new Date(now.getTime() - estimatedElapsed).toISOString();
+      } else {
+        currentDetail.started_at = nowISO;
+      }
     }
     currentDetail.processed = processedCount || 0;
     currentDetail.total = totalCount || 0;
@@ -587,10 +599,20 @@ export class TaskService {
 
       if (subPhase === 'TTS') {
         if (!currentDetail.tts?.started_at) {
+          // Estimate TTS start time for tasks started before deployment
+          const ttsTotal = totalCount || 0;
+          const ttsProcessed = processedCount || 0;
+          const ttsEstimate = TTS_SUB_PHASE_STATIC_ESTIMATES.TTS;
+          let estimatedElapsed: number;
+          if (ttsTotal > 0 && ttsProcessed > 0) {
+            estimatedElapsed = ttsEstimate * (ttsProcessed / ttsTotal);
+          } else {
+            estimatedElapsed = ttsEstimate;
+          }
           currentDetail.tts = {
             processed: 0,
             total: 0,
-            started_at: nowISO,
+            started_at: new Date(now.getTime() - estimatedElapsed).toISOString(),
             completed_at: null,
             duration_ms: null,
           };
@@ -604,15 +626,36 @@ export class TaskService {
           currentDetail.tts.duration_ms = Math.max(0, ttsElapsed);
           currentDetail.tts.completed_at = nowISO;
         }
+        // For tasks started before deployment, TTS sub-phase may have no
+        // tracking data. Estimate its duration from the static estimate.
+        if (!currentDetail.tts?.started_at) {
+          currentDetail.tts = {
+            processed: 0,
+            total: 0,
+            started_at: new Date(now.getTime() - TTS_SUB_PHASE_STATIC_ESTIMATES.TTS).toISOString(),
+            completed_at: nowISO,
+            duration_ms: TTS_SUB_PHASE_STATIC_ESTIMATES.TTS,
+          };
+        }
         if (!currentDetail.render?.started_at) {
+          // Estimate RENDER start time for tasks started before deployment
+          const renderTotal = totalCount || 0;
+          const renderProcessed = processedCount || 0;
+          const renderEstimate = TTS_SUB_PHASE_STATIC_ESTIMATES.RENDER;
+          let estimatedElapsed: number;
+          if (renderTotal > 0 && renderProcessed > 0) {
+            estimatedElapsed = renderEstimate * (renderProcessed / renderTotal);
+          } else {
+            estimatedElapsed = renderEstimate;
+          }
           currentDetail.render = {
             processed: 0,
             total: 0,
-            started_at: nowISO,
+            started_at: new Date(now.getTime() - estimatedElapsed).toISOString(),
             completed_at: null,
             duration_ms: null,
           };
-          currentDetail.sub_phase_started_at = nowISO;
+          currentDetail.sub_phase_started_at = currentDetail.render.started_at;
         }
         currentDetail.render.processed = processedCount || 0;
         currentDetail.render.total = totalCount || 0;
