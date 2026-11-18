@@ -55,6 +55,12 @@ Thumbs.db
 temp_article.txt
 article.txt
 
+# 不推送 README
+README.md
+readme.md
+Readme.md
+README
+
 # 密钥与凭证
 *.key
 *.pem
