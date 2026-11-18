@@ -665,7 +665,8 @@ def download_and_match(scenes: list, zhipu_client, config: dict, temp_dir: Path,
         work_dir: 工作目录
         agnes_client: Agnes客户端（用于中文关键词翻译为英文）
         model: Agnes模型名称
-        progress_cb: 进度回调函数，签名 (phase, message, processed, total)
+        progress_cb: 进度回调函数，签名 (phase, message, processed, total, sub_phase=None)
+            sub_phase 用于 TTS_COMPOSE：'TTS' 表示语音合成，'RENDER' 表示视频渲染
 
     Returns:
         {scene_id: [{"path":..., "score":...}, ...]}
@@ -1619,7 +1620,8 @@ def compose_video(
         config: 全局配置
         render_params: 渲染参数
         work_dir: 工作目录
-        progress_cb: 进度回调函数，签名 (phase, message, processed, total)
+        progress_cb: 进度回调函数，签名 (phase, message, processed, total, sub_phase=None)
+            sub_phase 用于 TTS_COMPOSE：'TTS' 表示语音合成，'RENDER' 表示视频渲染
         r2_prefix: R2 前缀（用于保存片段到 R2 供缓存复用）
         r2_config: R2 配置
         task_id: 任务ID
@@ -1667,7 +1669,7 @@ def compose_video(
                           f"按 {scene.duration:.1f}s 渲染（无解说音轨）")
 
                 if progress_cb:
-                    progress_cb("TTS_COMPOSE", f"镜头 {scene.scene_id} 语音合成完成", done, len(scenes))
+                    progress_cb("TTS_COMPOSE", f"镜头 {scene.scene_id} 语音合成完成", done, len(scenes), sub_phase="TTS")
 
                 if done % 10 == 0 or done == len(scenes):
                     print(f"  🎙️ 语音进度 {done}/{len(scenes)}")
@@ -1743,11 +1745,12 @@ def compose_video(
                             f"镜头 {rendered_scene.scene_id} 段{seg_idx} 渲染完成",
                             rendered_count,
                             total_expected,
+                            sub_phase="RENDER",
                         )
             except Exception as e:
                 print(f"  ❌ 镜头 {scene.scene_id} 段{seg_idx}: 渲染失败: {e}")
                 if progress_cb:
-                    progress_cb("TTS_COMPOSE", f"镜头 {scene.scene_id} 段{seg_idx} 渲染失败", 0, len(scenes))
+                    progress_cb("TTS_COMPOSE", f"镜头 {scene.scene_id} 段{seg_idx} 渲染失败", 0, len(scenes), sub_phase="RENDER")
 
     # 按场景顺序、段顺序排列，确保拼接顺序正确
     for scene in scenes:
@@ -1927,16 +1930,19 @@ def main():
                 "endpoint": args.r2_endpoint,
             }
 
-        def _cb_progress(phase: str, message: str, processed: int = 0, total: int = 0):
+        def _cb_progress(phase: str, message: str, processed: int = 0, total: int = 0, sub_phase: str | None = None):
+            payload = {
+                "task_id": args.task_id,
+                "phase": phase,
+                "status": "processing",
+                "message": message,
+                "processed_count": processed,
+                "total_count": total,
+            }
+            if sub_phase:
+                payload["sub_phase"] = sub_phase
             send_callback(
-                {
-                    "task_id": args.task_id,
-                    "phase": phase,
-                    "status": "processing",
-                    "message": message,
-                    "processed_count": processed,
-                    "total_count": total,
-                },
+                payload,
                 args.callback_url,
                 args.callback_secret,
             )

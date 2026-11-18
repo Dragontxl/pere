@@ -2,6 +2,27 @@ import { Bindings } from '../types/env';
 import { Task, TaskPhase, TaskStatus, phaseOrder, phaseStatusMap } from '../types';
 import { findBgmName } from '../constants/bgm';
 
+// ── Time-based progress constants ──────────────────────────────────────────
+// Static duration estimates (ms) used ONLY for phases that have not started
+// yet. Once a phase starts, its duration is predicted adaptively from elapsed
+// time × total / processed. Once a phase completes, its actual duration is
+// locked into phase_details and reused for all future progress calculations.
+// These estimates are dynamically replaced by real data as the pipeline runs.
+const PHASE_STATIC_ESTIMATES: Record<TaskPhase, number> = {
+  SCENE_GEN: 120_000,        // ~2 min: article generation + scene splitting
+  ASSET_MATCH: 180_000,      // ~3 min: image download + matching
+  REMOTION_RENDER: 60_000,   // ~1 min: analysis + decision (fast)
+  TTS_COMPOSE: 600_000,      // ~10 min: TTS + rendering (slowest)
+};
+
+// Sub-phase static estimates for TTS_COMPOSE (ms). TTS_COMPOSE has two
+// sub-steps: speech synthesis (fast) and video rendering (slow). Tracking
+// them separately prevents the fast TTS step from being overweighted.
+const TTS_SUB_PHASE_STATIC_ESTIMATES = {
+  TTS: 120_000,     // ~2 min: speech synthesis
+  RENDER: 480_000,  // ~8 min: video rendering
+};
+
 export class TaskService {
   constructor(public env: Bindings) {}
 
@@ -509,81 +530,230 @@ export class TaskService {
       total_count: totalCount,
       failed_count: failedCount,
       message,
+      sub_phase: subPhase,
     } = body;
 
-    const taskResult = await this.env.DB.prepare('SELECT status FROM tasks WHERE id = ?').bind(taskId).first() as any;
+    const taskResult = await this.env.DB.prepare('SELECT status, phase_details FROM tasks WHERE id = ?').bind(taskId).first() as any;
     if (taskResult?.status === 'COMPLETED') {
       return { success: true, taskId };
     }
 
-    const phaseIndex = phaseOrder.indexOf(phase as TaskPhase);
-    const phasesCount = phaseOrder.length;
     const runningStatus = phaseStatusMap[phase as TaskPhase]?.running || phaseStatusMap[phaseOrder[0]].running;
-
     const terminalStatusClause = "status NOT IN ('COMPLETED', 'FAILED', 'CANCELLED')";
 
-    // Build phase_details JSON to track per-phase progress
-    const existingDetails = (taskResult as any)?.phase_details;
+    // Parse existing phase_details
     let phaseDetails: Record<string, any> = {};
     try {
-      if (existingDetails) {
-        phaseDetails = JSON.parse(existingDetails);
+      if (taskResult?.phase_details) {
+        phaseDetails = JSON.parse(taskResult.phase_details);
       }
     } catch {
       phaseDetails = {};
     }
-    phaseDetails[phase] = {
-      processed: processedCount || 0,
-      total: totalCount || 0,
-      failed: failedCount || 0,
-      updated_at: new Date().toISOString(),
-    };
 
-    if (totalCount > 0) {
-      const phaseProgress = Math.round((processedCount / totalCount) * 100);
-      // Cap at 99% during phase execution: 100% is only set by handleTaskComplete
-      // when the task is actually finished. Without this cap, the last phase
-      // (TTS_COMPOSE) reaching phaseProgress=100% would show overall progress=100%
-      // even though sub-steps (e.g. rendering) may still be running.
-      const rawProgress = Math.round((phaseIndex / phasesCount) * 100 + (phaseProgress / 100) * (100 / phasesCount));
-      const progress = Math.min(rawProgress, 99);
+    const now = new Date();
+    const nowISO = now.toISOString();
 
-      // These counters represent the current phase's latest values, NOT cumulative
-      // across callbacks. Each callback reports the current processed/total/failed
-      // for the phase; per-phase history is preserved in phase_details JSON.
-      await this.env.DB.prepare(`
-        UPDATE tasks SET
-          progress = MIN(MAX(progress, ?), 99),
-          current_phase = ?,
-          status = ?,
-          status_message = ?,
-          processed_frames = ?,
-          total_frames = ?,
-          failed_frames = ?,
-          phase_details = ?,
-          updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now')
-        WHERE id = ? AND ${terminalStatusClause}
-      `).bind(
-        progress, phase, runningStatus, message || null,
-        processedCount || 0, totalCount || 0, failedCount || 0,
-        JSON.stringify(phaseDetails), taskId
-      ).run();
-    } else {
-      const progress = Math.round((phaseIndex / phasesCount) * 100);
-
-      await this.env.DB.prepare(`
-        UPDATE tasks SET
-          progress = MIN(MAX(progress, ?), 99),
-          current_phase = ?,
-          status = ?,
-          status_message = ?,
-          phase_details = ?,
-          updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now')
-        WHERE id = ? AND ${terminalStatusClause}
-      `).bind(progress, phase, runningStatus, message || null, JSON.stringify(phaseDetails), taskId).run();
+    // ── Phase transition: lock in previous phase's actual duration ──────────
+    // When a callback arrives for a NEW phase, the previously active phase
+    // (which has started_at but no duration_ms) is now complete. Lock its real
+    // duration so future progress calculations use actual elapsed time.
+    const prevActivePhase = phaseOrder.find((p) => {
+      const d = phaseDetails[p];
+      return d?.started_at && !d?.duration_ms && p !== phase;
+    });
+    if (prevActivePhase) {
+      const elapsed = now.getTime() - new Date(phaseDetails[prevActivePhase].started_at).getTime();
+      phaseDetails[prevActivePhase].duration_ms = Math.max(0, elapsed);
+      phaseDetails[prevActivePhase].completed_at = nowISO;
     }
 
+    // ── Initialize / update current phase detail ────────────────────────────
+    const currentDetail: Record<string, any> = phaseDetails[phase] || {};
+    if (!currentDetail.started_at) {
+      currentDetail.started_at = nowISO;
+    }
+    currentDetail.processed = processedCount || 0;
+    currentDetail.total = totalCount || 0;
+    currentDetail.failed = failedCount || 0;
+    currentDetail.updated_at = nowISO;
+
+    // ── TTS_COMPOSE sub-phase tracking ───────────────────────────────────────
+    // TTS_COMPOSE has two sub-steps: TTS (speech synthesis, fast) and RENDER
+    // (video rendering, slow). Each sub-phase gets its own timing so the
+    // progress prediction reflects the real time distribution.
+    if (phase === 'TTS_COMPOSE' && subPhase) {
+      currentDetail.sub_phase = subPhase;
+
+      if (subPhase === 'TTS') {
+        if (!currentDetail.tts?.started_at) {
+          currentDetail.tts = {
+            processed: 0,
+            total: 0,
+            started_at: nowISO,
+            completed_at: null,
+            duration_ms: null,
+          };
+        }
+        currentDetail.tts.processed = processedCount || 0;
+        currentDetail.tts.total = totalCount || 0;
+      } else if (subPhase === 'RENDER') {
+        // Lock in TTS sub-phase duration before RENDER starts
+        if (currentDetail.tts?.started_at && !currentDetail.tts?.duration_ms) {
+          const ttsElapsed = now.getTime() - new Date(currentDetail.tts.started_at).getTime();
+          currentDetail.tts.duration_ms = Math.max(0, ttsElapsed);
+          currentDetail.tts.completed_at = nowISO;
+        }
+        if (!currentDetail.render?.started_at) {
+          currentDetail.render = {
+            processed: 0,
+            total: 0,
+            started_at: nowISO,
+            completed_at: null,
+            duration_ms: null,
+          };
+          currentDetail.sub_phase_started_at = nowISO;
+        }
+        currentDetail.render.processed = processedCount || 0;
+        currentDetail.render.total = totalCount || 0;
+      }
+    }
+
+    phaseDetails[phase] = currentDetail;
+
+    // ── Time-based progress calculation ─────────────────────────────────────
+    // progress = total_elapsed / total_predicted × 100, capped at 99%.
+    //   - Completed phases: locked actual duration (duration_ms)
+    //   - Current phase:    adaptive prediction (elapsed × total / processed)
+    //   - Unreached phases: static estimate (replaced by real data once started)
+    const progress = this.calculateTimeProgress(phaseDetails, phase as TaskPhase, now);
+
+    // These counters represent the current phase's latest values, NOT cumulative
+    // across callbacks. Each callback reports the current processed/total/failed
+    // for the phase; per-phase history is preserved in phase_details JSON.
+    await this.env.DB.prepare(`
+      UPDATE tasks SET
+        progress = MIN(MAX(progress, ?), 99),
+        current_phase = ?,
+        status = ?,
+        status_message = ?,
+        processed_frames = ?,
+        total_frames = ?,
+        failed_frames = ?,
+        phase_details = ?,
+        updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now')
+      WHERE id = ? AND ${terminalStatusClause}
+    `).bind(
+      progress, phase, runningStatus, message || null,
+      processedCount || 0, totalCount || 0, failedCount || 0,
+      JSON.stringify(phaseDetails), taskId
+    ).run();
+
     return { success: true, taskId };
+  }
+
+  /**
+   * Calculate time-based progress from phase_details.
+   *
+   * Instead of weighting phases equally, this predicts total duration dynamically
+   * and computes progress as elapsed / predicted_total × 100.
+   *
+   * - Completed phases use their locked actual duration (duration_ms).
+   * - The current phase uses adaptive prediction: elapsed × (total / processed).
+   *   When processed is 0 (phase just started), falls back to static estimate.
+   * - Unreached phases use static estimates, which are replaced by real data
+   *   as the pipeline advances.
+   *
+   * For TTS_COMPOSE, sub-phases (TTS vs RENDER) are tracked separately so the
+   * fast TTS step doesn't get overweighted relative to slow rendering.
+   */
+  private calculateTimeProgress(
+    phaseDetails: Record<string, any>,
+    currentPhase: TaskPhase,
+    now: Date,
+  ): number {
+    let totalPredictedMs = 0;
+    let totalElapsedMs = 0;
+
+    for (const phase of phaseOrder) {
+      const detail = phaseDetails[phase];
+
+      // ── Completed phase: locked actual duration ──────────────────────────
+      if (detail?.duration_ms) {
+        totalPredictedMs += detail.duration_ms;
+        totalElapsedMs += detail.duration_ms;
+        continue;
+      }
+
+      // ── Current phase: adaptive prediction ───────────────────────────────
+      if (phase === currentPhase && detail?.started_at) {
+        const elapsed = Math.max(0, now.getTime() - new Date(detail.started_at).getTime());
+
+        // TTS_COMPOSE with sub-phase tracking
+        if (phase === 'TTS_COMPOSE' && detail.sub_phase) {
+          if (detail.sub_phase === 'TTS') {
+            // TTS sub-phase running — predict TTS, estimate RENDER statically
+            const ttsProcessed = detail.tts?.processed ?? detail.processed ?? 0;
+            const ttsTotal = detail.tts?.total ?? detail.total ?? 0;
+            const ttsPredicted = ttsTotal > 0 && ttsProcessed > 0
+              ? elapsed * (ttsTotal / ttsProcessed)
+              : TTS_SUB_PHASE_STATIC_ESTIMATES.TTS;
+
+            totalPredictedMs += ttsPredicted + TTS_SUB_PHASE_STATIC_ESTIMATES.RENDER;
+            totalElapsedMs += elapsed;
+            continue;
+          } else if (detail.sub_phase === 'RENDER') {
+            // RENDER sub-phase running — TTS is done (locked), predict RENDER
+            const ttsDuration = detail.tts?.duration_ms
+              ?? (detail.tts?.started_at
+                ? Math.max(0, now.getTime() - new Date(detail.tts.started_at).getTime())
+                : TTS_SUB_PHASE_STATIC_ESTIMATES.TTS);
+
+            const renderStartedAt = detail.sub_phase_started_at || detail.started_at;
+            const renderElapsed = renderStartedAt
+              ? Math.max(0, now.getTime() - new Date(renderStartedAt).getTime())
+              : 0;
+
+            const renderProcessed = detail.render?.processed ?? detail.processed ?? 0;
+            const renderTotal = detail.render?.total ?? detail.total ?? 0;
+            const renderPredicted = renderTotal > 0 && renderProcessed > 0
+              ? renderElapsed * (renderTotal / renderProcessed)
+              : TTS_SUB_PHASE_STATIC_ESTIMATES.RENDER;
+
+            totalPredictedMs += ttsDuration + renderPredicted;
+            totalElapsedMs += ttsDuration + renderElapsed;
+            continue;
+          }
+          // Unknown sub_phase — fall through to normal phase logic
+        }
+
+        // Normal phase (or TTS_COMPOSE without sub-phase): adaptive prediction
+        const processed = detail.processed ?? 0;
+        const total = detail.total ?? 0;
+        if (total > 0 && processed > 0) {
+          totalPredictedMs += elapsed * (total / processed);
+        } else {
+          totalPredictedMs += PHASE_STATIC_ESTIMATES[phase];
+        }
+        totalElapsedMs += elapsed;
+        continue;
+      }
+
+      // ── Phase started but not current and not completed ──────────────────
+      // (e.g. gap between phases). Use static estimate for prediction.
+      if (detail?.started_at) {
+        totalPredictedMs += PHASE_STATIC_ESTIMATES[phase];
+        continue;
+      }
+
+      // ── Not reached: static estimate ────────────────────────────────────
+      totalPredictedMs += PHASE_STATIC_ESTIMATES[phase];
+    }
+
+    if (totalPredictedMs > 0) {
+      return Math.min(Math.round((totalElapsedMs / totalPredictedMs) * 100), 99);
+    }
+    return 0;
   }
 
   /**
@@ -732,12 +902,33 @@ export class TaskService {
     if (index < 0) return;
 
     const doneStatus = phaseStatusMap[phase].done;
-    const progress = Math.round(((index + 1) / phaseOrder.length) * 100);
+    const task = await this.getTask(taskId);
+    if (!task) return;
+
+    // Lock in the phase's actual duration so future progress calculations use real data
+    let phaseDetails: Record<string, any> = {};
+    try {
+      if (task.phase_details) {
+        phaseDetails = JSON.parse(task.phase_details);
+      }
+    } catch {
+      phaseDetails = {};
+    }
+
+    const detail = phaseDetails[phase];
+    if (detail?.started_at && !detail.duration_ms) {
+      const elapsed = Date.now() - new Date(detail.started_at).getTime();
+      detail.duration_ms = Math.max(0, elapsed);
+      detail.completed_at = new Date().toISOString();
+    }
+
+    // Use time-based progress (capped at 99% — 100% is set by handleTaskComplete)
+    const progress = this.calculateTimeProgress(phaseDetails, phase, new Date());
 
     await this.env.DB.prepare(`
-      UPDATE tasks SET status = ?, progress = MAX(progress, ?), current_phase = ?, status_message = ?, updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now')
+      UPDATE tasks SET status = ?, progress = MIN(MAX(progress, ?), 99), current_phase = ?, status_message = ?, phase_details = ?, updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now')
       WHERE id = ? AND status NOT IN ('COMPLETED', 'FAILED', 'CANCELLED')
-    `).bind(doneStatus, progress, phase, `Phase ${phase} completed`, taskId).run();
+    `).bind(doneStatus, progress, phase, `Phase ${phase} completed`, JSON.stringify(phaseDetails), taskId).run();
   }
 
   /**
