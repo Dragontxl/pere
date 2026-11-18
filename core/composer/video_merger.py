@@ -7,7 +7,7 @@
 import os
 import subprocess
 import tempfile
-from .moviepy_compat import VideoFileClip, concatenate_videoclips, AudioFileClip, set_audio, subclip
+from .moviepy_compat import VideoFileClip, AudioFileClip, set_audio, subclip
 
 # 系统 ffmpeg 和 ffprobe 路径
 FFMPEG_EXE = os.environ.get("IMAGEIO_FFMPEG_EXE", "ffmpeg")
@@ -107,14 +107,52 @@ def merge_clips_stream_copy(clip_paths: list, output_path: str) -> str:
     return output_path
 
 
+def _probe_clip_info(path: str) -> dict | None:
+    """用 ffprobe 获取片段信息，损坏返回 None
+
+    Returns:
+        dict 含 nb_frames, duration, pix_fmt 等；损坏时返回 None
+    """
+    if not os.path.exists(path) or os.path.getsize(path) < 204_800:
+        return None
+
+    try:
+        result = subprocess.run(
+            [FFPROBE_EXE, "-v", "error", "-select_streams", "v:0",
+             "-count_frames", "-show_entries",
+             "stream=nb_read_frames,duration,pix_fmt",
+             "-of", "json", path],
+            capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=15
+        )
+        if result.returncode != 0:
+            return None
+
+        import json
+        data = json.loads(result.stdout)
+        stream = data.get("streams", [{}])[0]
+        nb_frames = int(stream.get("nb_read_frames", "0"))
+        duration = float(stream.get("duration", "0"))
+        if nb_frames <= 0 or duration <= 0.1:
+            return None
+
+        return {
+            "nb_frames": nb_frames,
+            "duration": duration,
+            "pix_fmt": stream.get("pix_fmt", ""),
+        }
+    except Exception:
+        return None
+
+
 def merge_clips(clip_paths: list, output_path: str, preset: str = "veryfast") -> str:
     """拼接视频片段
 
     优先使用流拷贝拼接（-c copy，零重编码，秒级完成），
-    如果所有片段编码参数不兼容导致流拷贝失败，则回退到
-    重编码拼接（decode + re-encode）。
+    如果片段编码参数不兼容或存在损坏片段，则回退到
+    ffmpeg concat demuxer 重编码（流式处理，不会 OOM）。
 
-    单个片段加载失败时自动跳过，不中断整体拼接。
+    损坏片段自动跳过，不中断整体拼接。
 
     Args:
         clip_paths: 视频片段路径列表（按顺序）
@@ -127,60 +165,78 @@ def merge_clips(clip_paths: list, output_path: str, preset: str = "veryfast") ->
     Raises:
         RuntimeError: 所有片段均加载失败或拼接失败时抛出
     """
+    # 预检所有片段，过滤损坏的
+    valid_clips = []
+    skipped = []
+    for path in clip_paths:
+        info = _probe_clip_info(path)
+        if info:
+            valid_clips.append(path)
+        else:
+            skipped.append(path)
+            print(f"  ⚠️ 片段损坏或无效，跳过: {os.path.basename(path)}")
+
+    if not valid_clips:
+        raise RuntimeError("所有视频片段均无效或损坏，无法拼接")
+
+    if skipped:
+        print(f"  ⚠️ 跳过 {len(skipped)} 个损坏片段，拼接 {len(valid_clips)} 个有效片段")
+
     # 先尝试流拷贝拼接（零重编码，速度极快）
     try:
         print(f"  ⚡ 尝试流拷贝拼接（零重编码）...")
-        merge_clips_stream_copy(clip_paths, output_path)
+        merge_clips_stream_copy(valid_clips, output_path)
         file_size = os.path.getsize(output_path) / (1024 * 1024)
         print(f"  ✅ 流拷贝拼接完成（{file_size:.1f} MB，未重编码）")
         return output_path
     except Exception as e:
-        print(f"  ⚠️ 流拷贝拼接失败，回退到重编码拼接: {e}")
-        print(f"  🔄 使用 re-encode 拼接（preset={preset}）...")
-    clips = []
-    for path in clip_paths:
-        try:
-            clip = VideoFileClip(path)
-            clips.append(clip)
-        except Exception as e:
-            print(f"  ⚠️ 片段加载失败，跳过: {path} ({e})")
-            continue
+        print(f"  ⚠️ 流拷贝拼接失败，回退到 ffmpeg 重编码拼接: {e}")
+        print(f"  🔄 使用 ffmpeg concat demuxer 重编码（preset={preset}）...")
 
-    if not clips:
-        raise RuntimeError("所有视频片段均加载失败，无法拼接")
+    # ffmpeg concat demuxer 重编码：流式处理，不一次性加载所有片段到内存
+    concat_list = []
+    for path in valid_clips:
+        abs_path = os.path.abspath(path)
+        safe_path = abs_path.replace("'", "'\\''")
+        concat_list.append(f"file '{safe_path}'")
 
-    if len(clips) < len(clip_paths):
-        print(f"  ⚠️ 拼接片段数 {len(clips)} < 实际生成数 {len(clip_paths)}（部分片段加载失败已跳过）")
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as f:
+        f.write("\n".join(concat_list))
+        list_file = f.name
 
     try:
-        # chain 方法：所有片段同分辨率时直接拼接，比 compose 更快
-        final_clip = concatenate_videoclips(clips, method="chain")
-        final_clip.write_videofile(
+        cmd = [
+            FFMPEG_EXE,
+            "-y",
+            "-f", "concat",
+            "-safe", "0",
+            "-i", list_file,
+            "-c:v", "libx264",
+            "-preset", preset,
+            "-c:a", "aac",
+            "-threads", "4",
+            "-movflags", "+faststart",
             output_path,
-            codec="libx264",
-            audio_codec="aac",
-            threads=4,
-            preset=preset,
-            ffmpeg_params=['-movflags', '+faststart']
+        ]
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8", errors="replace",
+            timeout=600  # 10 分钟超时（重编码 175 个片段可能需要较长时间）
         )
+        if result.returncode != 0 or not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+            raise RuntimeError(f"ffmpeg 重编码拼接失败: {result.stderr.strip()}")
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("ffmpeg 重编码拼接超时（10分钟）")
     except Exception as e:
-        for clip in clips:
-            try:
-                clip.close()
-            except Exception:
-                pass
-        raise RuntimeError(f"视频拼接失败: {e}")
+        raise RuntimeError(f"ffmpeg 重编码拼接异常: {e}")
+    finally:
+        if os.path.exists(list_file):
+            os.unlink(list_file)
 
-    for clip in clips:
-        try:
-            clip.close()
-        except Exception:
-            pass
-    try:
-        final_clip.close()
-    except Exception:
-        pass
-
+    file_size = os.path.getsize(output_path) / (1024 * 1024)
+    print(f"  ✅ ffmpeg 重编码拼接完成（{file_size:.1f} MB，{len(valid_clips)} 个片段）")
     return output_path
 
 

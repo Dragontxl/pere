@@ -1176,6 +1176,60 @@ def render_remotion_scene(scene, duration, output_path, config: dict, render_par
             bg_public_path.unlink()
 
 
+def _validate_clip(clip_path: str) -> bool:
+    """用 ffprobe 验证视频片段是否有效（有有效帧、有效时长、合理文件大小）
+
+    检查项：
+    1. 文件存在且大小 > 200KB（排除 0 帧/空片段）
+    2. ffprobe 能读取到视频流，帧数 > 0，时长 > 0.1 秒
+
+    Args:
+        clip_path: 片段路径
+
+    Returns:
+        True 表示片段有效，False 表示损坏/无效
+    """
+    if not os.path.exists(clip_path):
+        return False
+
+    # 文件大小检查：低于 200KB 视为损坏（1帧0秒视频约 35-130KB）
+    if os.path.getsize(clip_path) < 204_800:
+        return False
+
+    # ffprobe 检查帧数和时长
+    ffmpeg_exe = os.environ.get("IMAGEIO_FFMPEG_EXE", "ffmpeg")
+    ffprobe_exe = os.path.join(os.path.dirname(ffmpeg_exe), "ffprobe.exe")
+    if not os.path.exists(ffprobe_exe):
+        # Linux 上可能没有 .exe 后缀
+        ffprobe_exe = os.path.join(os.path.dirname(ffmpeg_exe), "ffprobe")
+    if not os.path.exists(ffprobe_exe):
+        # 兜底：用 ffmpeg 的 -i 输出解析（不太可靠但总比没有好）
+        return True  # 无法验证时不拦截，交给后续流程处理
+
+    try:
+        import subprocess
+        result = subprocess.run(
+            [ffprobe_exe, "-v", "error", "-select_streams", "v:0",
+             "-count_frames", "-show_entries",
+             "stream=nb_read_frames,duration",
+             "-of", "json", clip_path],
+            capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=15
+        )
+        if result.returncode != 0:
+            return False
+
+        import json
+        data = json.loads(result.stdout)
+        stream = data.get("streams", [{}])[0]
+        nb_frames = int(stream.get("nb_read_frames", "0"))
+        duration = float(stream.get("duration", "0"))
+
+        return nb_frames > 0 and duration > 0.1
+    except Exception:
+        return False
+
+
 def _finalize_scene_clip(scene, clip_path, final_clip_path,
                           audio_segment_path, subtitle_text, crf,
                           enable_subtitle=True):
@@ -1282,11 +1336,31 @@ def _render_single_scene(
     if seg_duration <= 0:
         seg_duration = scene.duration
 
-    # 片段缓存：如果最终片段已存在（从之前的渲染或 R2 下载），直接复用
-    # 避免重复渲染未改变的场景，节省时间和 API 调用
+    # 辅助：渲染后验证，通过则返回，不通过则清理并返回 None
+    def _render_and_validate(render_fn, label):
+        """执行渲染 → 最终化 → 验证，返回 (scene, path) 或 None"""
+        result = render_fn()
+        if not result:
+            return None
+        rendered_scene, out_path = result
+        if _validate_clip(out_path):
+            print(f"  ✅ 镜头 {scene.scene_id} 段{seg_idx}: {label} 验证通过")
+            return rendered_scene, out_path
+        print(f"  ❌ 镜头 {scene.scene_id} 段{seg_idx}: {label} 产物损坏，尝试下一条路径")
+        # 清理损坏产物，避免影响后续路径
+        for p in [clip_path, final_clip_path]:
+            if p.exists():
+                p.unlink()
+        return None
+
+    # 片段缓存：如果最终片段已存在，先验证再复用
     if final_clip_path.exists() and final_clip_path.stat().st_size > 0:
-        print(f"  ♻️ 镜头 {scene.scene_id} 段{seg_idx}: 复用已缓存片段")
-        return scene, str(final_clip_path)
+        if _validate_clip(str(final_clip_path)):
+            print(f"  ♻️ 镜头 {scene.scene_id} 段{seg_idx}: 复用已缓存片段")
+            return scene, str(final_clip_path)
+        else:
+            print(f"  ⚠️ 镜头 {scene.scene_id} 段{seg_idx}: 缓存片段损坏，重新渲染")
+            final_clip_path.unlink()
 
     # 选取背景图片：优先用决策的 asset_path，回退到匹配结果第一张
     # Remotion 片段将以此照片为背景，消除与图片片段的风格割裂
@@ -1296,20 +1370,20 @@ def _render_single_scene(
         if matches:
             bg_image = matches[0]["path"]
 
-    # Remotion 渲染
+    # 路径1：Remotion 渲染
     if decision.implementation == "remotion" and not skip_remotion:
-        result = render_remotion_scene(
-            scene, seg_duration, str(clip_path), config, render_params,
-            background_image=bg_image, seg_idx=seg_idx
+        result = _render_and_validate(
+            lambda: _render_remotion_path(
+                scene, seg_duration, clip_path, final_clip_path,
+                config, render_params, audio_segment_path, subtitle_text,
+                crf, enable_subtitle, bg_image, seg_idx
+            ),
+            "Remotion渲染"
         )
         if result:
-            return _finalize_scene_clip(
-                scene, clip_path, final_clip_path,
-                audio_segment_path, subtitle_text, crf,
-                enable_subtitle
-            )
+            return result
 
-    # 图片 + Ken Burns 动效（Remotion 兜底 / 图片场景正常处理）
+    # 路径2：图片 + Ken Burns 动效（Remotion 兜底 / 图片场景正常处理）
     asset_path = decision.asset_path
     if not asset_path:
         matches = match_results.get(scene.scene_id, [])
@@ -1317,46 +1391,102 @@ def _render_single_scene(
             asset_path = matches[0]["path"]
 
     if asset_path:
-        try:
-            image_to_clip(
-                image_path=asset_path,
-                duration=seg_duration,
-                output_path=str(clip_path),
-                scene_id=scene.scene_id,
-                visual_type=scene.visual_type,
-                resolution=resolution,
-                fps=fps,
-                codec=codec,
-                audio_codec=audio_codec,
-                preset=preset,
-                threads=threads
-            )
-            return _finalize_scene_clip(
-                scene, clip_path, final_clip_path,
-                audio_segment_path, subtitle_text, crf,
-                enable_subtitle
-            )
-        except Exception as e:
-            print(f"  ❌ 镜头 {scene.scene_id}: 图片片段生成失败: {e}")
-
-    # 兜底1：无素材时用 Remotion 文字卡，保证解说和字幕不断档
-    if not skip_remotion:
-        print(f"  ⚠️ 镜头 {scene.scene_id}: 无可用素材，改用文字卡兜底")
-        result = render_remotion_scene(
-            scene, seg_duration, str(clip_path), config, render_params,
-            background_image=None, seg_idx=seg_idx
+        result = _render_and_validate(
+            lambda: _render_image_path(
+                scene, asset_path, seg_duration, clip_path, final_clip_path,
+                resolution, fps, codec, audio_codec, preset, threads,
+                audio_segment_path, subtitle_text, crf, enable_subtitle
+            ),
+            "图片Ken Burns"
         )
         if result:
-            return _finalize_scene_clip(
-                scene, clip_path, final_clip_path,
-                audio_segment_path, subtitle_text, crf,
-                enable_subtitle
-            )
+            return result
 
-    # 兜底2：纯色底图（走与图片片段完全相同的编码路径，保证拼接参数一致）
+    # 路径3：兜底1 - 无素材时用 Remotion 文字卡，保证解说和字幕不断档
+    if not skip_remotion:
+        print(f"  ⚠️ 镜头 {scene.scene_id}: 无可用素材，改用文字卡兜底")
+        result = _render_and_validate(
+            lambda: _render_remotion_path(
+                scene, seg_duration, clip_path, final_clip_path,
+                config, render_params, audio_segment_path, subtitle_text,
+                crf, enable_subtitle, None, seg_idx
+            ),
+            "文字卡兜底"
+        )
+        if result:
+            return result
+
+    # 路径4：兜底2 - 纯色底图（走与图片片段完全相同的编码路径，保证拼接参数一致）
+    result = _render_and_validate(
+        lambda: _render_color_path(
+            scene, seg_duration, clip_path, final_clip_path,
+            resolution, fps, codec, audio_codec, preset, threads,
+            audio_segment_path, subtitle_text, crf, enable_subtitle
+        ),
+        "纯色兜底"
+    )
+    if result:
+        return result
+
+    print(f"  ❌ 镜头 {scene.scene_id} 段{seg_idx}: 所有渲染路径均失败")
+    return None
+
+
+def _render_remotion_path(scene, seg_duration, clip_path, final_clip_path,
+                          config, render_params, audio_segment_path,
+                          subtitle_text, crf, enable_subtitle,
+                          background_image, seg_idx):
+    """Remotion 渲染 + 最终化，返回 (scene, final_clip_path) 或 None"""
+    result = render_remotion_scene(
+        scene, seg_duration, str(clip_path), config, render_params,
+        background_image=background_image, seg_idx=seg_idx
+    )
+    if not result:
+        return None
+    return _finalize_scene_clip(
+        scene, clip_path, final_clip_path,
+        audio_segment_path, subtitle_text, crf,
+        enable_subtitle
+    )
+
+
+def _render_image_path(scene, asset_path, seg_duration, clip_path,
+                       final_clip_path, resolution, fps, codec,
+                       audio_codec, preset, threads, audio_segment_path,
+                       subtitle_text, crf, enable_subtitle):
+    """图片 Ken Burns 渲染 + 最终化，返回 (scene, final_clip_path) 或 None"""
+    try:
+        image_to_clip(
+            image_path=asset_path,
+            duration=seg_duration,
+            output_path=str(clip_path),
+            scene_id=scene.scene_id,
+            visual_type=scene.visual_type,
+            resolution=resolution,
+            fps=fps,
+            codec=codec,
+            audio_codec=audio_codec,
+            preset=preset,
+            threads=threads
+        )
+        return _finalize_scene_clip(
+            scene, clip_path, final_clip_path,
+            audio_segment_path, subtitle_text, crf,
+            enable_subtitle
+        )
+    except Exception as e:
+        print(f"  ❌ 镜头 {scene.scene_id}: 图片片段生成失败: {e}")
+        return None
+
+
+def _render_color_path(scene, seg_duration, clip_path, final_clip_path,
+                       resolution, fps, codec, audio_codec, preset,
+                       threads, audio_segment_path, subtitle_text,
+                       crf, enable_subtitle):
+    """纯色底图兜底渲染 + 最终化，返回 (scene, final_clip_path) 或 None"""
     try:
         from PIL import Image
-        color_png = work_dir / f"color_{scene.scene_id}.png"
+        color_png = clip_path.parent / f"color_{scene.scene_id}.png"
         Image.new("RGB", tuple(resolution), (18, 20, 38)).save(str(color_png))
         image_to_clip(
             image_path=str(color_png),
@@ -1379,8 +1509,7 @@ def _render_single_scene(
         )
     except Exception as e:
         print(f"  ❌ 镜头 {scene.scene_id}: 纯色兜底也失败了: {e}")
-
-    return None
+        return None
 
 
 def _split_text_balanced(text: str) -> list:
@@ -2333,6 +2462,52 @@ def render_shard(
                         total_clips,
                         sub_phase="RENDER",
                     )
+                continue
+
+            if not result:
+                print(f"  ❌ 镜头 {scene_id} 段{seg_idx}: 渲染未产出有效片段")
+                if progress_cb:
+                    progress_cb(
+                        "VIDEO_COMPOSE",
+                        f"镜头 {scene_id} 段{seg_idx} 渲染未产出有效片段",
+                        start_idx + len(results),
+                        total_clips,
+                        sub_phase="RENDER",
+                    )
+                continue
+
+            rendered_scene, clip_path = result
+
+            # 上传前二次验证：确保只把有效片段上传到 R2
+            if not _validate_clip(clip_path):
+                print(f"  ❌ 镜头 {scene_id} 段{seg_idx}: 渲染产物验证失败，不上传R2")
+                if progress_cb:
+                    progress_cb(
+                        "VIDEO_COMPOSE",
+                        f"镜头 {scene_id} 段{seg_idx} 产物验证失败",
+                        start_idx + len(results),
+                        total_clips,
+                        sub_phase="RENDER",
+                    )
+                continue
+
+            results[(scene_id, seg_idx)] = (rendered_scene, clip_path)
+
+            # 上传片段到 R2（仅有效片段）
+            if clip_path and r2_prefix and r2_config:
+                r2_clip_key = f"{r2_prefix}/{os.path.basename(clip_path)}"
+                save_clip_to_r2(clip_path, r2_clip_key, r2_config)
+
+            # 报告进度（使用绝对计数）
+            rendered_count = len(results)
+            if progress_cb:
+                progress_cb(
+                    "VIDEO_COMPOSE",
+                    f"镜头 {scene_id} 段{seg_idx} 渲染完成",
+                    start_idx + rendered_count,
+                    total_clips,
+                    sub_phase="RENDER",
+                )
 
     success = len(results)
     failed = len(shard_clips) - success
