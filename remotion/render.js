@@ -102,9 +102,10 @@ function main() {
     ];
 
     // 使用系统 Chrome，避免 Remotion 下载 Headless Shell 失败
-    // spawnSync 传参数数组，无需 shell 转义，路径含空格也没问题
+    // Windows 上 Chrome 路径含空格，shell 执行时需要加引号
     if (chromePath) {
-        renderArgs.push(`--browser-executable=${chromePath}`);
+        const quote = (process.platform === 'win32' && chromePath.includes(' ')) ? '"' : '';
+        renderArgs.push(`--browser-executable=${quote}${chromePath}${quote}`);
     }
 
     console.log(`🎬 渲染 Remotion 场景: ${args.scene}`);
@@ -114,7 +115,9 @@ function main() {
     const result = spawnSync('npx', renderArgs, {
         cwd: __dirname,
         stdio: 'inherit',
-        shell: false
+        // Windows 上 npx 是 .cmd 文件，必须通过 shell 执行；
+        // Linux/macOS 上 npx 是可执行文件，直接 spawn 即可
+        shell: process.platform === 'win32'
     });
 
     if (result.status !== 0) {

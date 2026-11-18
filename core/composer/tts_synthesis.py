@@ -31,7 +31,8 @@ DEFAULT_TTS_CONFIG = {
 def _get_tts_config() -> dict:
     """加载 TTS 配置
 
-    从 config/settings.json 读取，缺失字段使用默认值。
+    优先级：环境变量 > settings.json > 默认值。
+    空字符串不会覆盖默认值，避免 settings.json 中留空导致 TTS 不可用。
 
     Returns:
         TTS 配置字典
@@ -39,8 +40,17 @@ def _get_tts_config() -> dict:
     config = load_config("settings.json")
     tts_config = dict(DEFAULT_TTS_CONFIG)
     for key, value in config.items():
-        if key.startswith("tts_"):
+        if key.startswith("tts_") and value:  # 只使用非空值覆盖默认
             tts_config[key] = value
+
+    # 环境变量兜底（GitHub Actions 通过 secrets 传入）
+    env_url = os.environ.get("TTS_API_URL")
+    if env_url:
+        tts_config["tts_api_url"] = env_url
+    env_key = os.environ.get("TTS_API_KEY")
+    if env_key:
+        tts_config["tts_api_key"] = env_key
+
     return tts_config
 
 

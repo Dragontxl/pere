@@ -253,6 +253,8 @@ jobs:
           ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
           AGNES_API_KEY: ${{ secrets.AGNES_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          TTS_API_URL: ${{ secrets.TTS_API_URL }}
+          TTS_API_KEY: ${{ secrets.TTS_API_KEY }}
           CALLBACK_URL: ${{ secrets.CALLBACK_URL }}
           CALLBACK_SECRET: ${{ secrets.CALLBACK_SECRET }}
           R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
