@@ -140,9 +140,12 @@ export const fileApi = {
    * 上传文件到 R2（用户级，JWT 认证）。
    * 使用 JSON + base64 传输，避免 Cloudflare Workers 环境下
    * multipart/form-data 的 Content-Type 在边缘被剥离的问题。
-   * 返回 R2 key，前端将其作为 bgm_key 等传入创建任务。
+   * 返回 R2 key，前端将其作为 bgm_key / article_file_key 传入创建任务。
+   *
+   * @param file 要上传的文件
+   * @param prefix 存储前缀，默认 `bgm`（背景音乐），文章文件传 `articles`
    */
-  async upload(file: File): Promise<{ key: string; size: number; filename: string }> {
+  async upload(file: File, prefix = 'bgm'): Promise<{ key: string; size: number; filename: string }> {
     // 将文件读取为 base64
     const arrayBuffer = await file.arrayBuffer();
     const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
@@ -158,6 +161,7 @@ export const fileApi = {
         filename: file.name,
         content: base64,
         contentType: file.type || undefined,
+        prefix,
       }),
     });
 

@@ -272,10 +272,14 @@ publicFileRoutes.post('/purge', async (c) => {
 // ── 用户级文件上传（JWT 认证）──────────────────────────────────────────
 
 /**
- * 用户上传自定义 BGM 文件到 R2。
- * 文件存储在 `bgm/` 前缀下，key 形如 `bgm/<uuid>-<filename>`。
- * 前端创建任务时将此 key 作为 `bgm_key` 传给后端，workflow 检测到 `bgm/`
- * 前缀后会从 R2 下载到本地再传给 main.py。
+ * 用户上传文件到 R2（JWT 认证）。
+ * 通过可选的 `prefix` 参数决定存储路径：
+ *   - `bgm/`（默认）：存储自定义背景音乐，key 形如 `bgm/<uuid>-<filename>`。
+ *   - `articles/`：存储文章文件（txt/md），key 形如 `articles/<uuid>-<filename>`。
+ * 前端创建任务时将此 key 作为 `bgm_key` / `article_file_key` 传给后端，
+ * workflow 会从 R2 下载到本地再使用。
+ *
+ * 支持文件类型：音频（mp3/wav/ogg/flac/m4a/aac）与文本（txt/md/text）。
  *
  * 注意：Cloudflare Workers 环境下 multipart/form-data 的 Content-Type 会在
  * 边缘被剥离，导致 `c.req.formData()` 不可用。因此使用 JSON + base64 传输。
@@ -285,25 +289,36 @@ publicFileRoutes.post('/upload', authMiddleware, async (c) => {
 
   try {
     const body = await c.req.json();
-    const { filename, content, contentType } = body as {
+    const { filename, content, contentType, prefix } = body as {
       filename: string;
       content: string; // base64 编码的文件内容
       contentType?: string;
+      prefix?: string;
     };
 
     if (!filename || !content) {
       return c.json({ code: 400, data: null, msg: '缺少 filename 或 content' }, 400);
     }
 
-    // 校验文件类型：只接受音频
-    const allowedTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg', 'audio/flac', 'audio/m4a', 'audio/aac', 'audio/x-m4a'];
+    // 校验 prefix：只允许字母数字、下划线、连字符和斜杠，防止路径穿越
+    const safePrefix = prefix && /^[\w-]+(\/[\w-]+)*\/?$/.test(prefix) ? prefix.replace(/\/+$/, '') : 'bgm';
+
+    // 校验文件类型：音频 + 文本
+    const audioTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg', 'audio/flac', 'audio/m4a', 'audio/aac', 'audio/x-m4a'];
+    const textTypes = ['text/plain', 'text/markdown', 'text/x-markdown'];
     const fileExt = filename.toLowerCase().split('.').pop();
-    const allowedExts = ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac'];
-    const extOk = allowedExts.includes(fileExt || '');
-    const typeOk = !contentType || allowedTypes.includes(contentType) || contentType.startsWith('audio/');
+    const audioExts = ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac'];
+    const textExts = ['txt', 'md', 'text'];
+    const extOk = audioExts.includes(fileExt || '') || textExts.includes(fileExt || '');
+    const typeOk =
+      !contentType ||
+      audioTypes.includes(contentType) ||
+      textTypes.includes(contentType) ||
+      contentType.startsWith('audio/') ||
+      contentType.startsWith('text/');
 
     if (!extOk && !typeOk) {
-      return c.json({ code: 400, data: null, msg: '只支持音频文件（mp3, wav, ogg, flac, m4a, aac）' }, 400);
+      return c.json({ code: 400, data: null, msg: '不支持的文件类型（支持音频与 txt/md 文本）' }, 400);
     }
 
     // 文件大小限制：50 MB（base64 解码后）
@@ -313,14 +328,16 @@ publicFileRoutes.post('/upload', authMiddleware, async (c) => {
       return c.json({ code: 400, data: null, msg: '文件大小不能超过 50MB' }, 400);
     }
 
-    // 生成唯一 key：bgm/<uuid>-<filename>
+    // 生成唯一 key：<prefix>/<uuid>-<filename>
     const uuid = crypto.randomUUID();
     const safeName = filename.replace(/[^\w.\-]/g, '_');
-    const key = `bgm/${uuid}-${safeName}`;
+    const key = `${safePrefix}/${uuid}-${safeName}`;
+
+    const defaultContentType = safePrefix === 'articles' ? 'text/plain; charset=utf-8' : 'audio/mpeg';
 
     await R2.put(key, decoded, {
       httpMetadata: {
-        contentType: contentType || 'audio/mpeg',
+        contentType: contentType || defaultContentType,
       },
     });
 
@@ -330,7 +347,7 @@ publicFileRoutes.post('/upload', authMiddleware, async (c) => {
       msg: '上传成功',
     });
   } catch (error) {
-    console.error('BGM upload error:', error);
+    console.error('File upload error:', error);
     const msg = error instanceof Error ? error.message : String(error);
     return c.json({ code: 500, data: null, msg: `上传失败: ${msg}` }, 500);
   }

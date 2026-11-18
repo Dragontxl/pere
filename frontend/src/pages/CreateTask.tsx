@@ -36,28 +36,13 @@ export default function CreateTask() {
 
     setError('');
     try {
-      // Upload file to R2 via admin API
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('prefix', 'articles');
-
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/v1/admin/files/upload', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
-      });
-
-      const data = await response.json();
-      if (response.ok) {
-        setFileKey(data.data.key);
-        if (!title) {
-          setTitle(file.name.replace(/\.[^.]+$/, ''));
-        }
-      } else {
-        setError(data.msg || '文件上传失败');
+      // Upload article file to R2 via the JWT-authenticated upload endpoint.
+      // Using JSON + base64 avoids the multipart/form-data Content-Type stripping
+      // issue on Cloudflare Workers. The file is stored under the `articles/` prefix.
+      const result = await fileApi.upload(file, 'articles');
+      setFileKey(result.key);
+      if (!title) {
+        setTitle(file.name.replace(/\.[^.]+$/, ''));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : '文件上传失败');
