@@ -837,7 +837,7 @@ pexel-remotion/                          # 本地目录（GitHub 仓库名：per
 5. **Webhook 替代轮询**：使用 Server-Sent Events 或 WebSocket 实现更实时的进度推送
 6. **用户配额**：限制每用户每日任务数，防止滥用
 7. **封面自动生成**：从最终视频提取首帧作为任务封面
-8. **BGM 支持**：用户可选择背景音乐，workflow 中混合
+8. **BGM 支持**：用户可选择 4 段预设背景音乐或上传自定义音频文件，workflow 中混合。自定义 BGM 存储在 R2（key 以 `bgm/` 前缀区分），workflow 检测到该前缀时从 R2 下载到本地再传给 `main.py`。上传接口使用 JSON + base64 传输，因 Cloudflare Workers 环境下 multipart/form-data 的 Content-Type 会在边缘被剥离，`c.req.formData()` 不可用。
 
 ---
 
@@ -863,5 +863,6 @@ pexel-remotion/                          # 本地目录（GitHub 仓库名：per
 | dispatch 报 422「No more than 10 properties」 | 加 `bgm_key` 后 `client_payload` 达到 11 个属性，超过 GitHub repository_dispatch 上限 | 移除冗余的 `phase` 字段（与 `start_phase` 值相同且 workflow 不使用），保持 10 个以内 |
 | runner 上 ffmpeg 找不到，`[WinError 2]` | `windows-latest` runner 无预装 ffmpeg，`_resolve_ffmpeg` 回退到 `"ffmpeg"` 字符串后 `subprocess` 抛 `FileNotFoundError`，字幕烧录/静音音轨/BGM 混合全失败 | workflow 用 `imageio-ffmpeg`（随 moviepy 安装）的 `get_ffmpeg_exe()` 设置 `IMAGEIO_FFMPEG_EXE` 环境变量，`_resolve_ffmpeg` 优先读取 |
 | 带 BGM 的最终视频没上传到 R2 | `mix_bgm` 后 `main.py` 将 `final_output.mp4` 重命名为 `final_with_bgm.mp4`，原上传步骤只找 `final_output.mp4`，文件不存在被跳过 | 上传步骤检测两个文件，统一以 `final_output.mp4` 作为 R2 key，保证下载链接一致 |
+| 自定义 BGM 上传返回 500「Content-Type header is missing」 | Cloudflare Workers 边缘会剥离 multipart/form-data 请求的 Content-Type，body 被消费为空（`content-length: 0`），`c.req.formData()` 不可用 | 改用 JSON + base64 传输：前端读取文件为 base64，后端 `c.req.json()` 解析后解码存入 R2，完全绕过 multipart 限制 |
 
-当前状态：Worker / D1 / R2 / GitHub Actions 均已打通，创建任务即自动触发 `video-generation` workflow，一次 run 跑完整管线，任务详情页实时展示 4 阶段进度，最终视频落 R2 并可在线预览与下载。背景音乐可选：创建任务时从 4 段预设 BGM 中选择，不选则不加；选定后 `main.py` 在拼接后混合 BGM（视频流零重编码，BGM 循环铺满时长），最终视频以 `final_output.mp4` 上传 R2，下载链接与无 BGM 任务一致。
+当前状态：Worker / D1 / R2 / GitHub Actions 均已打通，创建任务即自动触发 `video-generation` workflow，一次 run 跑完整管线，任务详情页实时展示 4 阶段进度，最终视频落 R2 并可在线预览与下载。背景音乐可选：创建任务时从 4 段预设 BGM 中选择，或上传自定义音频文件（mp3/wav/ogg/flac/m4a/aac，≤50MB）。自定义 BGM 经 JSON+base64 上传存入 R2（key 以 `bgm/` 前缀区分），workflow 检测到该前缀时从 R2 下载到本地再传给 `main.py`。选定 BGM 后 `main.py` 在拼接后混合（视频流零重编码，BGM 循环铺满时长），最终视频以 `final_output.mp4` 上传 R2，下载链接与无 BGM 任务一致。已验证：自定义 BGM 上传 → 创建任务 → workflow 从 R2 下载 → BGM 混合 → 最终 MP4 含音频轨（mean -42.6 dB）。
