@@ -132,6 +132,6 @@ export const fileApi = {
   },
 
   getNoCacheUrl(key: string): string {
-    return `${API_BASE}/files/nocache/${encodeURIComponent(key)}`;
+    return `${API_BASE}/files/nocache?key=${encodeURIComponent(key)}`;
   },
 };

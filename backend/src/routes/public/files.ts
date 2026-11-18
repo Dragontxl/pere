@@ -130,9 +130,13 @@ publicFileRoutes.get('/preview/:filename', async (c) => {
   }
 });
 
-publicFileRoutes.get('/nocache/*', async (c) => {
+publicFileRoutes.get('/nocache', async (c) => {
   const { R2 } = c.env as Bindings;
-  const key = decodeURIComponent(c.req.param('*') || '');
+  // Read the key from the query param to avoid path-encoding issues with
+  // slashes inside keys (e.g. "tasks/<id>/final_output.mp4"). A path wildcard
+  // like "/nocache/*" loses multi-segment keys on some edge runtimes.
+  const rawKey = c.req.query('key') ?? c.req.param('*') ?? '';
+  const key = decodeURIComponent(rawKey);
 
   try {
     const object = await R2.get(key);
@@ -147,6 +151,10 @@ publicFileRoutes.get('/nocache/*', async (c) => {
     const ext = filename.toLowerCase().split('.').pop();
     const contentTypes: Record<string, string> = {
       'mp4': 'video/mp4',
+      'avi': 'video/x-msvideo',
+      'mov': 'video/quicktime',
+      'mkv': 'video/x-matroska',
+      'webm': 'video/webm',
       'jpg': 'image/jpeg',
       'jpeg': 'image/jpeg',
       'png': 'image/png',
@@ -156,7 +164,6 @@ publicFileRoutes.get('/nocache/*', async (c) => {
 
     const contentType = contentTypes[ext || ''] || object.httpMetadata?.contentType || 'application/octet-stream';
     headers.set('Content-Type', contentType);
-    headers.set('Content-Length', object.size.toString());
     headers.set('Accept-Ranges', 'bytes');
     headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
     headers.set('Pragma', 'no-cache');
@@ -168,6 +175,35 @@ publicFileRoutes.get('/nocache/*', async (c) => {
     if ((object.httpMetadata as any)?.lastModified) {
       headers.set('Last-Modified', new Date((object.httpMetadata as any).lastModified).toUTCString());
     }
+
+    const contentLength = object.size;
+    const range = c.req.header('Range');
+
+    if (range) {
+      const match = range.match(/bytes=(\d+)-(\d*)/);
+      if (match) {
+        const start = parseInt(match[1], 10);
+        const end = match[2] ? parseInt(match[2], 10) : contentLength - 1;
+
+        if (start >= contentLength) {
+          return new Response(null, {
+            status: 416,
+            headers: { 'Content-Range': `bytes */${contentLength}` },
+          });
+        }
+
+        const chunkSize = end - start + 1;
+        const arrayBuffer = await object.arrayBuffer();
+        const chunk = arrayBuffer.slice(start, end + 1);
+
+        headers.set('Content-Range', `bytes ${start}-${end}/${contentLength}`);
+        headers.set('Content-Length', chunkSize.toString());
+
+        return new Response(chunk, { status: 206, headers });
+      }
+    }
+
+    headers.set('Content-Length', contentLength.toString());
 
     return new Response(object.body, { headers });
   } catch (error) {
