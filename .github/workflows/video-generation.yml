@@ -135,8 +135,8 @@ jobs:
 
       - name: 安装系统依赖
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq imagemagick fonts-noto-cjk
+          sudo apt-get update --verbose
+          sudo apt-get install -y --no-install-recommends imagemagick fonts-noto-cjk
 
       - name: 安装 Python 依赖
         run: |
@@ -458,8 +458,8 @@ jobs:
 
       - name: 安装系统依赖
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq imagemagick fonts-noto-cjk
+          sudo apt-get update --verbose
+          sudo apt-get install -y --no-install-recommends imagemagick fonts-noto-cjk
 
       - name: 安装 Python 依赖
         run: |
@@ -575,8 +575,8 @@ jobs:
 
       - name: 安装系统依赖
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq imagemagick fonts-noto-cjk
+          sudo apt-get update --verbose
+          sudo apt-get install -y --no-install-recommends imagemagick fonts-noto-cjk
 
       - name: 安装 Python 依赖
         run: |
