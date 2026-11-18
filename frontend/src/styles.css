@@ -861,6 +861,24 @@ body {
   font-size: 1rem;
 }
 
+/* ── BGM Section ────────────────────────────────────────────────────── */
+.bgm-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.bgm-upload-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.bgm-upload-row .upload-success {
+  flex: 1;
+}
+
 /* ── Checkbox ───────────────────────────────────────────────────────── */
 .checkbox-group {
   display: flex;

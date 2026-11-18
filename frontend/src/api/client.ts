@@ -135,6 +135,36 @@ export const fileApi = {
   getNoCacheUrl(key: string): string {
     return `${API_BASE}/files/nocache?key=${encodeURIComponent(key)}`;
   },
+
+  /**
+   * 上传文件到 R2（用户级，JWT 认证）。
+   * 返回 R2 key，前端将其作为 bgm_key 等传入创建任务。
+   */
+  async upload(file: File): Promise<{ key: string; size: number; filename: string }> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    // 注意：不要设置 Content-Type，浏览器会自动设置 multipart/form-data + boundary
+
+    const response = await fetch(`${API_BASE}/files/upload`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    const data = await response.json() as ApiResponse<{ key: string; size: number; filename: string }>;
+
+    if (!response.ok) {
+      throw new Error(data.msg || `上传失败 (${response.status})`);
+    }
+
+    return data.data;
+  },
 };
 
 // ── BGM ────────────────────────────────────────────────────────────────

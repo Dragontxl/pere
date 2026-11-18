@@ -293,7 +293,21 @@ jobs:
           }
 
           if ($env:BGM_KEY -ne "") {
-            $cmd += @("--bgm", "assets/bgm/$env:BGM_KEY")
+            if ($env:BGM_KEY -like "bgm/*") {
+              # 自定义 BGM：从 R2 下载到本地文件，再传给 main.py
+              $bgmFileName = Split-Path $env:BGM_KEY -Leaf
+              $localBgmPath = "assets/bgm/$bgmFileName"
+              Write-Host "BGM_KEY 是自定义上传，从 R2 下载: $env:BGM_KEY -> $localBgmPath"
+              npx --yes wrangler r2 object get "$env:R2_BUCKET_NAME/$env:BGM_KEY" --file $localBgmPath --remote 2>&1
+              if ($LASTEXITCODE -ne 0) {
+                Write-Error "Failed to download custom BGM from R2"
+                exit 1
+              }
+              $cmd += @("--bgm", $localBgmPath)
+            } else {
+              # 预设 BGM：使用仓库中的文件
+              $cmd += @("--bgm", "assets/bgm/$env:BGM_KEY")
+            }
           }
 
           $cmdLine = $cmd -join " "

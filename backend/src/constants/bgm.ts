@@ -15,9 +15,19 @@ export const BGM_OPTIONS: BgmOption[] = [
   { key: 'warm.mp3', name: '温馨吉他', description: '温暖的吉他和弦，适合情感/故事' },
 ];
 
-/** 根据 key 查找 BGM 名称，找不到返回 null（无 BGM）。 */
+/** 根据 key 查找 BGM 名称。
+ * - 预设 BGM（assets/bgm/ 下的文件名）返回目录中的名称。
+ * - 自定义上传的 BGM（key 以 `bgm/` 开头）返回「自定义：filename」。
+ * - 找不到返回 null（无 BGM）。
+ */
 export function findBgmName(key: string | null | undefined): string | null {
   if (!key) return null;
   const opt = BGM_OPTIONS.find((o) => o.key === key);
-  return opt ? opt.name : null;
+  if (opt) return opt.name;
+  // 自定义上传：key 形如 "bgm/<uuid>-song.mp3"
+  if (key.startsWith('bgm/')) {
+    const filename = key.split('/').pop() || key;
+    return `自定义：${filename}`;
+  }
+  return null;
 }

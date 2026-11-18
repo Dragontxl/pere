@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings } from '../../types/env';
+import { authMiddleware } from '../../middleware/auth';
 
 const publicFileRoutes = new Hono();
 
@@ -265,6 +266,66 @@ publicFileRoutes.post('/purge', async (c) => {
   } catch (error) {
     console.error('Cloudflare cache purge error:', error);
     return c.json({ code: 500, data: null, msg: 'Cache purge error' }, 500);
+  }
+});
+
+// ── 用户级文件上传（JWT 认证）──────────────────────────────────────────
+
+/**
+ * 用户上传自定义 BGM 文件到 R2。
+ * 文件存储在 `bgm/` 前缀下，key 形如 `bgm/<uuid>-<filename>`。
+ * 前端创建任务时将此 key 作为 `bgm_key` 传给后端，workflow 检测到 `bgm/`
+ * 前缀后会从 R2 下载到本地再传给 main.py。
+ */
+publicFileRoutes.post('/upload', authMiddleware, async (c) => {
+  const { R2 } = c.env as Bindings;
+
+  try {
+    const formData = await c.req.formData();
+    const file = formData.get('file') as File | null;
+
+    if (!file) {
+      return c.json({ code: 400, data: null, msg: '缺少文件' }, 400);
+    }
+
+    // 校验文件类型：只接受音频
+    const allowedTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg', 'audio/flac', 'audio/m4a', 'audio/aac', 'audio/x-m4a'];
+    const fileExt = file.name.toLowerCase().split('.').pop();
+    const allowedExts = ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac'];
+    const extOk = allowedExts.includes(fileExt || '');
+    const typeOk = !file.type || allowedTypes.includes(file.type) || file.type.startsWith('audio/');
+
+    if (!extOk && !typeOk) {
+      return c.json({ code: 400, data: null, msg: '只支持音频文件（mp3, wav, ogg, flac, m4a, aac）' }, 400);
+    }
+
+    // 文件大小限制：50 MB
+    const MAX_SIZE = 50 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      return c.json({ code: 400, data: null, msg: '文件大小不能超过 50MB' }, 400);
+    }
+
+    // 生成唯一 key：bgm/<uuid>-<filename>
+    const uuid = crypto.randomUUID();
+    const safeName = file.name.replace(/[^\w.\-]/g, '_');
+    const key = `bgm/${uuid}-${safeName}`;
+
+    const arrayBuffer = await file.arrayBuffer();
+
+    await R2.put(key, arrayBuffer, {
+      httpMetadata: {
+        contentType: file.type || 'audio/mpeg',
+      },
+    });
+
+    return c.json({
+      code: 200,
+      data: { key, size: file.size, filename: file.name },
+      msg: '上传成功',
+    });
+  } catch (error) {
+    console.error('BGM upload error:', error);
+    return c.json({ code: 500, data: null, msg: '上传失败' }, 500);
   }
 });
 

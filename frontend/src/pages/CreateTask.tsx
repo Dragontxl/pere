@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { taskApi, bgmApi } from '../api/client';
+import { taskApi, bgmApi, fileApi } from '../api/client';
 import type { BgmOption } from '../types';
 
 type ArticleMode = 'ai' | 'paste' | 'upload';
@@ -16,9 +16,13 @@ export default function CreateTask() {
   const [enableSubtitle, setEnableSubtitle] = useState(true);
   const [bgmKey, setBgmKey] = useState('');
   const [bgmOptions, setBgmOptions] = useState<BgmOption[]>([]);
+  const [customBgmKey, setCustomBgmKey] = useState('');
+  const [customBgmName, setCustomBgmName] = useState('');
+  const [bgmUploading, setBgmUploading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const bgmInputRef = useRef<HTMLInputElement>(null);
 
   const navigate = useNavigate();
 
@@ -60,6 +64,36 @@ export default function CreateTask() {
     }
   };
 
+  const handleBgmUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setError('');
+    setBgmUploading(true);
+    try {
+      const result = await fileApi.upload(file);
+      setCustomBgmKey(result.key);
+      setCustomBgmName(result.filename);
+      // 上传自定义 BGM 后清空预设选择
+      setBgmKey('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'BGM 上传失败');
+    } finally {
+      setBgmUploading(false);
+      if (bgmInputRef.current) {
+        bgmInputRef.current.value = '';
+      }
+    }
+  };
+
+  const removeCustomBgm = () => {
+    setCustomBgmKey('');
+    setCustomBgmName('');
+    if (bgmInputRef.current) {
+      bgmInputRef.current.value = '';
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -76,7 +110,7 @@ export default function CreateTask() {
         orientation,
         language,
         enable_subtitle: enableSubtitle,
-        bgm_key: bgmKey || undefined,
+        bgm_key: customBgmKey || bgmKey || undefined,
       });
 
       navigate(`/tasks/${data.id}`);
@@ -237,21 +271,65 @@ export default function CreateTask() {
 
           <div className="form-group">
             <label>背景音乐</label>
-            <select
-              value={bgmKey}
-              onChange={(e) => setBgmKey(e.target.value)}
-            >
-              <option value="">不添加背景音乐</option>
-              {bgmOptions.map((bgm) => (
-                <option key={bgm.key} value={bgm.key}>
-                  {bgm.name}
-                </option>
-              ))}
-            </select>
+            <div className="bgm-section">
+              <select
+                value={bgmKey}
+                onChange={(e) => {
+                  setBgmKey(e.target.value);
+                  // 选择预设时清空自定义 BGM
+                  if (e.target.value) {
+                    removeCustomBgm();
+                  }
+                }}
+                disabled={!!customBgmKey}
+              >
+                <option value="">不添加背景音乐</option>
+                {bgmOptions.map((bgm) => (
+                  <option key={bgm.key} value={bgm.key}>
+                    {bgm.name}
+                  </option>
+                ))}
+              </select>
+
+              {/* 自定义 BGM 上传 */}
+              <div className="bgm-upload-row">
+                <input
+                  ref={bgmInputRef}
+                  type="file"
+                  accept="audio/*,.mp3,.wav,.ogg,.flac,.m4a,.aac"
+                  onChange={handleBgmUpload}
+                  style={{ display: 'none' }}
+                />
+                <button
+                  type="button"
+                  className="btn btn-sm btn-ghost"
+                  onClick={() => bgmInputRef.current?.click()}
+                  disabled={bgmUploading}
+                >
+                  {bgmUploading ? '上传中...' : '📁 上传自定义 BGM'}
+                </button>
+
+                {customBgmKey && (
+                  <div className="upload-success">
+                    <span className="upload-icon">🎵</span>
+                    <span>已上传：{customBgmName}</span>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-ghost"
+                      onClick={removeCustomBgm}
+                    >
+                      移除
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
             <p className="form-hint">
-              {bgmKey
+              {customBgmKey
+                ? '已选择自定义背景音乐'
+                : bgmKey
                 ? bgmOptions.find((b) => b.key === bgmKey)?.description || '已选择背景音乐'
-                : '生成视频时混合所选背景音乐（可选）'}
+                : '生成视频时混合所选背景音乐（可选，支持上传自定义音频文件）'}
             </p>
           </div>
         </div>
