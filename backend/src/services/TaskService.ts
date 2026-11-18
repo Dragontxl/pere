@@ -10,17 +10,18 @@ import { findBgmName } from '../constants/bgm';
 // These estimates are dynamically replaced by real data as the pipeline runs.
 const PHASE_STATIC_ESTIMATES: Record<TaskPhase, number> = {
   SCENE_GEN: 120_000,        // ~2 min: article generation + scene splitting
-  ASSET_MATCH: 180_000,      // ~3 min: image download + matching
+  ASSET_MATCH: 240_000,      // ~4 min: parallel image download + matching (4-way concurrent)
   REMOTION_RENDER: 60_000,   // ~1 min: analysis + decision (fast)
-  TTS_COMPOSE: 600_000,      // ~10 min: TTS + rendering (slowest)
+  TTS_COMPOSE: 2_100_000,    // ~35 min: TTS (~1min) + parallel render across 4 runners (~30min)
 };
 
 // Sub-phase static estimates for TTS_COMPOSE (ms). TTS_COMPOSE has two
-// sub-steps: speech synthesis (fast) and video rendering (slow). Tracking
-// them separately prevents the fast TTS step from being overweighted.
+// sub-steps: speech synthesis (fast) and video rendering (slow, parallelized
+// across 4 Ubuntu runners). Tracking them separately prevents the fast TTS
+// step from being overweighted.
 const TTS_SUB_PHASE_STATIC_ESTIMATES = {
   TTS: 120_000,     // ~2 min: speech synthesis
-  RENDER: 480_000,  // ~8 min: video rendering
+  RENDER: 2_100_000,  // ~35 min: parallel video rendering across 4 runners
 };
 
 export class TaskService {
@@ -585,8 +586,8 @@ export class TaskService {
         currentDetail.started_at = nowISO;
       }
     }
-    currentDetail.processed = processedCount || 0;
-    currentDetail.total = totalCount || 0;
+    currentDetail.processed = Math.max(currentDetail.processed || 0, processedCount || 0);
+    currentDetail.total = Math.max(currentDetail.total || 0, totalCount || 0);
     currentDetail.failed = failedCount || 0;
     currentDetail.updated_at = nowISO;
 
@@ -617,8 +618,8 @@ export class TaskService {
             duration_ms: null,
           };
         }
-        currentDetail.tts.processed = processedCount || 0;
-        currentDetail.tts.total = totalCount || 0;
+        currentDetail.tts.processed = Math.max(currentDetail.tts.processed || 0, processedCount || 0);
+        currentDetail.tts.total = Math.max(currentDetail.tts.total || 0, totalCount || 0);
       } else if (subPhase === 'RENDER') {
         // Lock in TTS sub-phase duration before RENDER starts
         if (currentDetail.tts?.started_at && !currentDetail.tts?.duration_ms) {
@@ -657,8 +658,8 @@ export class TaskService {
           };
           currentDetail.sub_phase_started_at = currentDetail.render.started_at;
         }
-        currentDetail.render.processed = processedCount || 0;
-        currentDetail.render.total = totalCount || 0;
+        currentDetail.render.processed = Math.max(currentDetail.render.processed || 0, processedCount || 0);
+        currentDetail.render.total = Math.max(currentDetail.render.total || 0, totalCount || 0);
       }
     }
 

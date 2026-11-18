@@ -55,6 +55,22 @@ on:
           - ASSET_MATCH
           - REMOTION_RENDER
           - TTS_COMPOSE
+      enable_subtitle:
+        description: '是否烧录字幕'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+      bgm_key:
+        description: '背景音乐 Key（bgm/xxx 为自定义，其他为预设）'
+        required: false
+        type: string
+      rerender_clips:
+        description: '重新渲染指定场景（与上面参数互斥，填了则跳过完整管线）'
+        required: false
+        type: string
 
   repository_dispatch:
     types: [video-generation]
@@ -62,10 +78,24 @@ on:
 permissions:
   contents: read
 
+env:
+  # 从 workflow_dispatch 或 repository_dispatch 中提取公共参数
+  TASK_ID: ${{ github.event.inputs.task_id || github.event.client_payload.task_id || '' }}
+  ENABLE_SUBTITLE: ${{ github.event.inputs.enable_subtitle || github.event.client_payload.enable_subtitle || 'true' }}
+  BGM_KEY: ${{ github.event.inputs.bgm_key || github.event.client_payload.bgm_key || '' }}
+  LANGUAGE: ${{ github.event.inputs.language || github.event.client_payload.language || 'zh' }}
+  ORIENTATION: ${{ github.event.inputs.orientation || github.event.client_payload.orientation || 'landscape' }}
+  RERENDER_CLIPS: ${{ github.event.inputs.rerender_clips || github.event.client_payload.rerender_clips || '' }}
+
 jobs:
-  generate-video:
-    runs-on: windows-latest
-    timeout-minutes: 120
+  # ══════════════════════════════════════════════════════════════
+  # Job 1: Pipeline — SCENE_GEN → ASSET_MATCH → REMOTION_RENDER → TTS
+  # 产出：scenes.json, match_results.json, decisions.json, render_manifest.json,
+  #       音频段, 图片 — 全部上传 R2 供渲染 job 下载
+  # ══════════════════════════════════════════════════════════════
+  pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
 
     steps:
       - name: 检出代码
@@ -81,184 +111,178 @@ jobs:
         with:
           node-version: "22"
 
+      - name: 缓存 pip 依赖
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+          restore-keys: pip-${{ runner.os }}-
+          retention-days: 14
+
+      - name: 缓存 npm 依赖
+        uses: actions/cache@v4
+        with:
+          path: remotion/node_modules
+          key: npm-${{ runner.os }}-${{ hashFiles('remotion/package-lock.json') }}
+          restore-keys: npm-${{ runner.os }}-
+          retention-days: 14
+
+      - name: 安装系统依赖
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq chromium-browser imagemagick fonts-noto-cjk
+          echo "CHROMIUM_PATH=$(which chromium-browser)" >> $GITHUB_ENV
+
       - name: 安装 Python 依赖
         run: |
           pip install -r requirements.txt
-
-      - name: 配置 ffmpeg 路径
-        shell: pwsh
-        run: |
-          # imageio-ffmpeg 自带 ffmpeg 二进制，通过环境变量让 Python 代码找到它
-          $ffmpegPath = python -c "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())"
-          if ($ffmpegPath) {
-            Add-Content -Path $env:GITHUB_ENV -Value "IMAGEIO_FFMPEG_EXE=$ffmpegPath"
-            Write-Host "ffmpeg: $ffmpegPath"
-          } else {
-            Write-Warning "imageio-ffmpeg not found, falling back to system ffmpeg"
-          }
 
       - name: 安装 Node.js 依赖
         run: |
           cd remotion && npm install
 
-      - name: 配置 ImageMagick
-        run: choco install imagemagick --no-wait
+      - name: 配置 ffmpeg 路径
+        run: |
+          ffmpegPath=$(python -c "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())")
+          if [ -n "$ffmpegPath" ]; then
+            echo "IMAGEIO_FFMPEG_EXE=$ffmpegPath" >> $GITHUB_ENV
+            echo "ffmpeg: $ffmpegPath"
+          else
+            echo "::warning::imageio-ffmpeg not found, falling back to system ffmpeg"
+          fi
 
       - name: 归一化任务参数
         id: params
-        shell: pwsh
+        shell: bash
         run: |
-          # `GITHUB_EVENT` is not a real GitHub Actions variable - the event payload
-          # is only available as a JSON file behind GITHUB_EVENT_PATH.
-          $payload = $null
-          if ($env:GITHUB_EVENT_PATH -and (Test-Path $env:GITHUB_EVENT_PATH)) {
-            $event = Get-Content -Path $env:GITHUB_EVENT_PATH -Raw -Encoding UTF8 | ConvertFrom-Json
-            if ($event.PSObject.Properties.Name -contains 'client_payload' -and $event.client_payload) {
-              $payload = $event.client_payload
-            }
-          }
+          payload=""
+          if [ -n "$GITHUB_EVENT_PATH" ] && [ -f "$GITHUB_EVENT_PATH" ]; then
+            event=$(cat "$GITHUB_EVENT_PATH")
+            if echo "$event" | grep -q '"client_payload"'; then
+              payload=$(echo "$event" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps(d.get('client_payload',{})))")
+            fi
+          fi
 
-          if ($payload) {
-            $task_id = $payload.task_id
-            $article_source = $payload.article_source
-            $article_content = $payload.article_content
-            $article_file_key = $payload.article_file_key
-            $orientation = $payload.orientation
-            $language = $payload.language
-            $enable_subtitle = $payload.enable_subtitle
-            $bgm_key = $payload.bgm_key
-            $start_phase = $payload.start_phase
-            $end_phase = $payload.end_phase
-            $rerender_clips = $payload.rerender_clips
-            $rerender_image = $payload.rerender_image
-            $rerender_type = $payload.rerender_type
-          } else {
-            $task_id = "${{ inputs.task_id }}"
-            $article_source = "pasted"
-            $article_content = "${{ inputs.article_content }}"
-            $article_file_key = "${{ inputs.article_file_key }}"
-            $orientation = "${{ inputs.orientation }}"
-            $language = "${{ inputs.language }}"
-            $enable_subtitle = "true"
-            $bgm_key = ""
-            $start_phase = "${{ inputs.start_phase }}"
-            $end_phase = "${{ inputs.end_phase }}"
-            $rerender_clips = ""
-            $rerender_image = @()
-            $rerender_type = @()
-          }
+          if [ -n "$payload" ] && [ "$payload" != "{}" ]; then
+            task_id=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('task_id',''))")
+            article_source=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('article_source','pasted'))")
+            article_content=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('article_content',''))")
+            article_file_key=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('article_file_key',''))")
+            orientation=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('orientation','landscape'))")
+            language=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('language','zh'))")
+            enable_subtitle=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('enable_subtitle','true'))")
+            bgm_key=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('bgm_key',''))")
+            start_phase=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('start_phase','SCENE_GEN'))")
+            end_phase=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('end_phase','TTS_COMPOSE'))")
+            rerender_clips=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('rerender_clips',''))")
+          else
+            task_id="${{ inputs.task_id }}"
+            article_source="pasted"
+            article_content="${{ inputs.article_content }}"
+            article_file_key="${{ inputs.article_file_key }}"
+            orientation="${{ inputs.orientation }}"
+            language="${{ inputs.language }}"
+            enable_subtitle="${{ inputs.enable_subtitle }}"
+            bgm_key="${{ inputs.bgm_key }}"
+            start_phase="${{ inputs.start_phase }}"
+            end_phase="${{ inputs.end_phase }}"
+            rerender_clips="${{ inputs.rerender_clips }}"
+          fi
 
           # 缺省值兜底
-          if (-not $article_source) { $article_source = "pasted" }
-          if (-not $orientation) { $orientation = "landscape" }
-          if (-not $language) { $language = "zh" }
-          if (-not $start_phase) { $start_phase = "SCENE_GEN" }
-          if (-not $end_phase) { $end_phase = "TTS_COMPOSE" }
-          if (-not $bgm_key) { $bgm_key = "" }
-          if (-not $rerender_clips) { $rerender_clips = "" }
-          if (-not $rerender_image) { $rerender_image = @() }
-          if (-not $rerender_type) { $rerender_type = @() }
-          if ("$enable_subtitle" -match '^(?i)false$') { $enable_subtitle = "false" } else { $enable_subtitle = "true" }
-          $article_content = [string]$article_content
-          $article_file_key = [string]$article_file_key
-          $bgm_key = [string]$bgm_key
-          $rerender_clips = [string]$rerender_clips
+          [ -z "$article_source" ] && article_source="pasted"
+          [ -z "$orientation" ] && orientation="landscape"
+          [ -z "$language" ] && language="zh"
+          [ -z "$start_phase" ] && start_phase="SCENE_GEN"
+          [ -z "$end_phase" ] && end_phase="TTS_COMPOSE"
+          [ -z "$bgm_key" ] && bgm_key=""
+          [ -z "$rerender_clips" ] && rerender_clips=""
+          if [ "$enable_subtitle" = "false" ] || [ "$enable_subtitle" = "False" ]; then
+            enable_subtitle="false"
+          else
+            enable_subtitle="true"
+          fi
 
-          # 写入环境变量供后续步骤使用（文章正文可能是多行，必须用分隔符语法）
-          Add-Content -Path $env:GITHUB_ENV -Value "TASK_ID=$task_id"
-          Add-Content -Path $env:GITHUB_ENV -Value "ARTICLE_SOURCE=$article_source"
-          $delimiter = "ARTICLE_EOF_$([guid]::NewGuid().ToString('N'))"
-          Add-Content -Path $env:GITHUB_ENV -Value "ARTICLE_CONTENT<<$delimiter"
-          Add-Content -Path $env:GITHUB_ENV -Value $article_content
-          Add-Content -Path $env:GITHUB_ENV -Value $delimiter
-          Add-Content -Path $env:GITHUB_ENV -Value "ARTICLE_FILE_KEY=$article_file_key"
-          Add-Content -Path $env:GITHUB_ENV -Value "ORIENTATION=$orientation"
-          Add-Content -Path $env:GITHUB_ENV -Value "LANGUAGE=$language"
-          Add-Content -Path $env:GITHUB_ENV -Value "ENABLE_SUBTITLE=$enable_subtitle"
-          Add-Content -Path $env:GITHUB_ENV -Value "BGM_KEY=$bgm_key"
-          Add-Content -Path $env:GITHUB_ENV -Value "START_PHASE=$start_phase"
-          Add-Content -Path $env:GITHUB_ENV -Value "END_PHASE=$end_phase"
-          Add-Content -Path $env:GITHUB_ENV -Value "RERENDER_CLIPS=$rerender_clips"
+          # 写入环境变量
+          echo "TASK_ID=$task_id" >> $GITHUB_ENV
+          echo "ARTICLE_SOURCE=$article_source" >> $GITHUB_ENV
+          echo "ARTICLE_CONTENT<<EOF_ARTICLE" >> $GITHUB_ENV
+          echo "$article_content" >> $GITHUB_ENV
+          echo "EOF_ARTICLE" >> $GITHUB_ENV
+          echo "ARTICLE_FILE_KEY=$article_file_key" >> $GITHUB_ENV
+          echo "ORIENTATION=$orientation" >> $GITHUB_ENV
+          echo "LANGUAGE=$language" >> $GITHUB_ENV
+          echo "ENABLE_SUBTITLE=$enable_subtitle" >> $GITHUB_ENV
+          echo "BGM_KEY=$bgm_key" >> $GITHUB_ENV
+          echo "START_PHASE=$start_phase" >> $GITHUB_ENV
+          echo "END_PHASE=$end_phase" >> $GITHUB_ENV
+          echo "RERENDER_CLIPS=$rerender_clips" >> $GITHUB_ENV
 
-          $phase_order = @('SCENE_GEN', 'ASSET_MATCH', 'REMOTION_RENDER', 'TTS_COMPOSE')
-          $start_idx = [array]::IndexOf($phase_order, $start_phase)
-          $end_idx = [array]::IndexOf($phase_order, $end_phase)
-          if ($start_idx -lt 0) { $start_idx = 0 }
-          if ($end_idx -lt 0) { $end_idx = 3 }
-          if ($end_idx -lt $start_idx) { $end_idx = $start_idx }
+          phase_order=(SCENE_GEN ASSET_MATCH REMOTION_RENDER TTS_COMPOSE)
+          start_idx=$(printf "%s\n" "${phase_order[@]}" | grep -n "$start_phase" | head -1 | cut -d: -f1)
+          end_idx=$(printf "%s\n" "${phase_order[@]}" | grep -n "$end_phase" | head -1 | cut -d: -f1)
+          [ -z "$start_idx" ] && start_idx=1
+          [ -z "$end_idx" ] && end_idx=4
+          [ "$end_idx" -lt "$start_idx" ] && end_idx=$start_idx
 
-          Add-Content -Path $env:GITHUB_ENV -Value "START_PHASE_IDX=$start_idx"
-          Add-Content -Path $env:GITHUB_ENV -Value "END_PHASE_IDX=$end_idx"
+          echo "START_PHASE_IDX=$((start_idx - 1))" >> $GITHUB_ENV
+          echo "END_PHASE_IDX=$((end_idx - 1))" >> $GITHUB_ENV
 
-          Write-Host "Task: $task_id"
-          Write-Host "Phases: $start_phase ($start_idx) → $end_phase ($end_idx)"
-          Write-Host "Article source: $article_source"
-          Write-Host "Article file key: $article_file_key"
+          # 输出给下游 job
+          echo "task_id=$task_id" >> $GITHUB_OUTPUT
+          echo "rerender_clips=$rerender_clips" >> $GITHUB_OUTPUT
+          echo "enable_subtitle=$enable_subtitle" >> $GITHUB_OUTPUT
+          echo "bgm_key=$bgm_key" >> $GITHUB_OUTPUT
+          echo "language=$language" >> $GITHUB_OUTPUT
+
+          echo "Task: $task_id"
+          echo "Phases: $start_phase ($((start_idx - 1))) -> $end_phase ($((end_idx - 1)))"
 
       - name: 下载文章文件（R2）
         if: ${{ env.ARTICLE_FILE_KEY != '' }}
-        shell: pwsh
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          # wrangler 4 语法：对象路径是位置参数
-          npx --yes wrangler r2 object get `
-            "${{ secrets.R2_BUCKET_NAME }}/${{ env.ARTICLE_FILE_KEY }}" `
+          npx --yes wrangler r2 object get \
+            "${{ secrets.R2_BUCKET_NAME }}/${{ env.ARTICLE_FILE_KEY }}" \
             --file article_download.txt --remote 2>&1
-
-          if (Test-Path article_download.txt) {
-            Copy-Item article_download.txt article.txt -Force
-            Write-Host "Article file downloaded from R2: ${{ env.ARTICLE_FILE_KEY }}"
-          } else {
-            Write-Error "Failed to download article file from R2"
-          }
+          if [ -f article_download.txt ]; then
+            cp article_download.txt article.txt
+            echo "Article file downloaded from R2: ${{ env.ARTICLE_FILE_KEY }}"
+          else
+            echo "::error::Failed to download article file from R2"
+            exit 1
+          fi
 
       - name: 保存文章内容
         if: ${{ env.ARTICLE_FILE_KEY == '' && env.ARTICLE_CONTENT != '' }}
-        shell: pwsh
         run: |
-          # 将文章内容写入文件
-          [System.IO.File]::WriteAllText(
-            "$PWD\article.txt",
-            $env:ARTICLE_CONTENT,
-            [System.Text.Encoding]::UTF8
-          )
-          Write-Host "Article content saved to article.txt ($($env:ARTICLE_CONTENT.Length) chars)"
+          printf '%s' "$ARTICLE_CONTENT" > article.txt
+          echo "Article content saved to article.txt ($(wc -c < article.txt) bytes)"
 
       - name: 发送阶段开始回调
-        shell: pwsh
+        shell: bash
         env:
           CALLBACK_URL: ${{ secrets.CALLBACK_URL }}
           CALLBACK_SECRET: ${{ secrets.CALLBACK_SECRET }}
         run: |
-          Write-Host "Sending phase start callback for task $env:TASK_ID"
-          # Import the same HMAC signing logic used by the backend
-          $secret = $env:CALLBACK_SECRET
-          $payload = @{
-            task_id = $env:TASK_ID
-            phase = $env:START_PHASE
-            status = 'started'
-            message = "Phase $env:START_PHASE started"
-          } | ConvertTo-Json -Compress
+          echo "Sending phase start callback for task $TASK_ID"
+          secret="$CALLBACK_SECRET"
+          payload=$(python3 -c "
+          import json, hmac, hashlib, base64, os
+          body = json.dumps({'task_id': os.environ['TASK_ID'], 'phase': os.environ['START_PHASE'], 'status': 'started', 'message': 'Phase ' + os.environ['START_PHASE'] + ' started'})
+          sig = base64.b64encode(hmac.new(os.environ['CALLBACK_SECRET'].encode(), body.encode(), hashlib.sha256).digest()).decode()
+          print(json.dumps({'payload': body, 'signature': sig}))
+          ")
+          payload_body=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin)['payload'])")
+          payload_sig=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin)['signature'])")
+          curl -s -X POST "$CALLBACK_URL" \
+            -H "Content-Type: application/json" \
+            -H "X-Callback-Signature: $payload_sig" \
+            -d "$payload_body" || echo "Callback send failed (will continue)"
 
-          $hmac = New-Object System.Security.Cryptography.HMACSHA256
-          $hmac.Key = [System.Text.Encoding]::UTF8.GetBytes($secret)
-          $hash = [System.Convert]::ToBase64String($hmac.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($payload)))
-
-          $headers = @{
-            "Content-Type" = "application/json"
-            "X-Callback-Signature" = $hash
-          }
-
-          try {
-            $resp = Invoke-RestMethod -Uri $env:CALLBACK_URL -Method Post -Headers $headers -Body $payload
-            Write-Host "Callback response: $($resp | ConvertTo-Json -Compress)"
-          } catch {
-            Write-Host "Callback send failed (will continue): $($_.Exception.Message)"
-          }
-
-      - name: 执行视频生成
+      - name: 执行流水线（SCENE_GEN → TTS）
         id: generate
         env:
           ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
@@ -274,91 +298,70 @@ jobs:
           R2_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        shell: pwsh
+        shell: bash
         run: |
-          # 构建命令行参数
-          $cmd = @(
-            "python", "main.py",
-            "--task-id", $env:TASK_ID,
-            "--article-source", $env:ARTICLE_SOURCE,
-            "--start-phase", $env:START_PHASE,
-            "--end-phase", $env:END_PHASE,
-            "--orientation", $env:ORIENTATION,
-            "--language", $env:LANGUAGE,
-            "--output-dir", "./output",
-            "--callback-url", $env:CALLBACK_URL,
-            "--callback-secret", $env:CALLBACK_SECRET,
-            "--r2-prefix", "tasks/$env:TASK_ID",
-            "--r2-bucket", $env:R2_BUCKET_NAME,
-            "--r2-access-key-id", $env:R2_ACCESS_KEY_ID,
-            "--r2-secret-access-key", $env:R2_SECRET_ACCESS_KEY,
-            "--r2-endpoint", $env:R2_ENDPOINT_URL
+          cmd=(
+            "python" "main.py"
+            "--task-id" "$TASK_ID"
+            "--article-source" "$ARTICLE_SOURCE"
+            "--start-phase" "$START_PHASE"
+            "--end-phase" "$END_PHASE"
+            "--orientation" "$ORIENTATION"
+            "--language" "$LANGUAGE"
+            "--output-dir" "./output"
+            "--callback-url" "$CALLBACK_URL"
+            "--callback-secret" "$CALLBACK_SECRET"
+            "--r2-prefix" "tasks/$TASK_ID"
+            "--r2-bucket" "$R2_BUCKET_NAME"
+            "--r2-access-key-id" "$R2_ACCESS_KEY_ID"
+            "--r2-secret-access-key" "$R2_SECRET_ACCESS_KEY"
+            "--r2-endpoint" "$R2_ENDPOINT_URL"
           )
 
-          if ($env:ARTICLE_FILE_KEY -ne "") {
-            $cmd += @("--article-file", "article.txt")
-          } elseif ($env:ARTICLE_CONTENT -ne "") {
-            $cmd += @("--article-file", "article.txt")
-          }
+          if [ -n "$ARTICLE_FILE_KEY" ] || [ -n "$ARTICLE_CONTENT" ]; then
+            cmd+=("--article-file" "article.txt")
+          fi
 
-          if ($env:ENABLE_SUBTITLE -eq "false") {
-            $cmd += @("--no-subtitle")
-          }
+          if [ "$ENABLE_SUBTITLE" = "false" ]; then
+            cmd+=("--no-subtitle")
+          fi
 
-          if ($env:RERENDER_CLIPS -ne "") {
-            $cmd += @("--rerender-clips", $env:RERENDER_CLIPS)
-          }
+          if [ -n "$RERENDER_CLIPS" ]; then
+            cmd+=("--rerender-clips" "$RERENDER_CLIPS")
+          fi
 
-          # Rerender image overrides (array from payload)
-          if ($rerender_image -and $rerender_image.Count -gt 0) {
-            foreach ($img in $rerender_image) {
-              $cmd += @("--rerender-image", $img)
-            }
-          }
+          if [ -z "$RERENDER_CLIPS" ]; then
+            # 分片渲染模式：TTS 后停止，渲染由独立 job 执行
+            cmd+=("--render-shards" "4")
+          fi
 
-          # Rerender type overrides (array from payload)
-          if ($rerender_type -and $rerender_type.Count -gt 0) {
-            foreach ($tp in $rerender_type) {
-              $cmd += @("--rerender-type", $tp)
-            }
-          }
-
-          if ($env:BGM_KEY -ne "") {
-            if ($env:BGM_KEY -like "bgm/*") {
-              # 自定义 BGM：从 R2 下载到本地文件，再传给 main.py
-              $bgmFileName = Split-Path $env:BGM_KEY -Leaf
-              $localBgmPath = "assets/bgm/$bgmFileName"
-              Write-Host "BGM_KEY 是自定义上传，从 R2 下载: $env:BGM_KEY -> $localBgmPath"
-              npx --yes wrangler r2 object get "$env:R2_BUCKET_NAME/$env:BGM_KEY" --file $localBgmPath --remote 2>&1
-              if ($LASTEXITCODE -ne 0) {
-                Write-Error "Failed to download custom BGM from R2"
+          if [ -n "$BGM_KEY" ]; then
+            if [[ "$BGM_KEY" == bgm/* ]]; then
+              bgm_filename=$(basename "$BGM_KEY")
+              local_bgm="assets/bgm/$bgm_filename"
+              echo "BGM_KEY is custom upload, downloading from R2: $BGM_KEY -> $local_bgm"
+              npx --yes wrangler r2 object get "$R2_BUCKET_NAME/$BGM_KEY" --file "$local_bgm" --remote 2>&1
+              if [ $? -ne 0 ]; then
+                echo "::error::Failed to download custom BGM from R2"
                 exit 1
-              }
-              $cmd += @("--bgm", $localBgmPath)
-            } else {
-              # 预设 BGM：使用仓库中的文件
-              $cmd += @("--bgm", "assets/bgm/$env:BGM_KEY")
-            }
-          }
+              fi
+              cmd+=("--bgm" "$local_bgm")
+            else
+              cmd+=("--bgm" "assets/bgm/$BGM_KEY")
+            fi
+          fi
 
-          $cmdLine = $cmd -join " "
-          Write-Host "Running: $cmdLine"
-
-          # 执行并捕获退出码（& $cmd 会把整个数组当成命令名，必须分开传参）
-          $exe = $cmd[0]
-          $cmdArgs = @($cmd[1..($cmd.Count - 1)])
-          & $exe @cmdArgs
-          $exitCode = $LASTEXITCODE
-
-          if ($exitCode -ne 0) {
-            Write-Error "Video generation failed with exit code $exitCode"
-            exit $exitCode
-          }
+          echo "Running: ${cmd[*]}"
+          "${cmd[@]}"
+          exit_code=$?
+          if [ $exit_code -ne 0 ]; then
+            echo "::error::Video generation failed with exit code $exit_code"
+            exit $exit_code
+          fi
 
       - name: 上传中间产物到 R2
         if: ${{ always() && steps.generate.outcome == 'success' }}
         continue-on-error: true
-        shell: pwsh
         env:
           R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -367,125 +370,283 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          # 上传 scenes.json、match_results.json、decisions.json 到 R2
-          $prefix = "tasks/$env:TASK_ID"
-
-          $filesToUpload = @(
-            "output/scenes.json",
-            "output/match_results.json",
-            "output/decisions.json"
-          )
-
-          foreach ($file in $filesToUpload) {
-            if (Test-Path $file) {
-              $r2Key = "$prefix/$([System.IO.Path]::GetFileName($file))"
-              Write-Host "Uploading $file -> $r2Key"
-
-              # wrangler 4 语法：对象路径是位置参数（不是 --bucket/--key）
-              npx --yes wrangler r2 object put "$env:R2_BUCKET_NAME/$r2Key" --file $file --remote 2>&1
-
-              if ($LASTEXITCODE -ne 0) {
-                Write-Warning "Failed to upload $file to R2 (continuing)"
-              }
-            } else {
-              Write-Warning "$file not found, skipping upload"
-            }
-          }
-
-          # 上传最终视频：混合 BGM 后 main.py 会将 final_output.mp4 重命名为
-          # final_with_bgm.mp4，统一以 final_output.mp4 作为 R2 key，保证下载链接一致
-          $finalVideo = @(
-            "output/final_output.mp4",
-            "output/final_with_bgm.mp4"
-          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
-
-          if ($finalVideo) {
-            $r2Key = "$prefix/final_output.mp4"
-            Write-Host "Uploading $finalVideo -> $r2Key"
-            npx --yes wrangler r2 object put "$env:R2_BUCKET_NAME/$r2Key" --file $finalVideo --remote 2>&1
-            if ($LASTEXITCODE -ne 0) {
-              Write-Warning "Failed to upload final video to R2 (continuing)"
-            }
-          } else {
-            Write-Warning "No final video found, skipping upload"
-          }
-
-      - name: 发送进度回调
-        if: ${{ always() }}
-        shell: pwsh
-        env:
-          CALLBACK_URL: ${{ secrets.CALLBACK_URL }}
-          CALLBACK_SECRET: ${{ secrets.CALLBACK_SECRET }}
-          JOB_STATUS: ${{ job.status }}
-        run: |
-          $secret = $env:CALLBACK_SECRET
-          $phase = $env:END_PHASE
-          # GitHub 没有 GITHUB_RUN_RESULT 这个变量，job.status 才是当前作业状态
-          $status = if ($env:JOB_STATUS -eq 'success') { 'completed' } else { 'failed' }
-          $message = "Phase $phase $status"
-
-          $payload = @{
-            task_id = $env:TASK_ID
-            phase = $phase
-            status = $status
-            start_phase = $env:START_PHASE
-            end_phase = $env:END_PHASE
-            message = $message
-            processed_count = 1
-            total_count = 1
-          } | ConvertTo-Json -Compress
-
-          $hmac = New-Object System.Security.Cryptography.HMACSHA256
-          $hmac.Key = [System.Text.Encoding]::UTF8.GetBytes($secret)
-          $hash = [System.Convert]::ToBase64String($hmac.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($payload)))
-
-          $headers = @{
-            "Content-Type" = "application/json"
-            "X-Callback-Signature" = $hash
-          }
-
-          try {
-            $resp = Invoke-RestMethod -Uri $env:CALLBACK_URL -Method Post -Headers $headers -Body $payload
-            Write-Host "Progress callback response: $($resp | ConvertTo-Json -Compress)"
-          } catch {
-            Write-Host "Progress callback failed (will continue): $($_.Exception.Message)"
-          }
+          prefix="tasks/$TASK_ID"
+          for file in output/scenes.json output/match_results.json output/decisions.json output/render_manifest.json output/article.txt; do
+            if [ -f "$file" ]; then
+              r2_key="$prefix/$(basename "$file")"
+              echo "Uploading $file -> $r2_key"
+              npx --yes wrangler r2 object put "$R2_BUCKET_NAME/$r2_key" --file "$file" --remote 2>&1
+            fi
+          done
 
       - name: 发送错误回调
         if: ${{ failure() }}
-        shell: pwsh
+        shell: bash
         env:
           CALLBACK_URL: ${{ secrets.CALLBACK_URL }}
           CALLBACK_SECRET: ${{ secrets.CALLBACK_SECRET }}
         run: |
-          $secret = $env:CALLBACK_SECRET
-          $payload = @{
-            task_id = $env:TASK_ID
-            phase = $env:START_PHASE
-            status = 'failed'
-            error = "GitHub Actions workflow failed"
-          } | ConvertTo-Json -Compress
+          payload=$(python3 -c "
+          import json, hmac, hashlib, base64, os
+          body = json.dumps({'task_id': os.environ['TASK_ID'], 'phase': os.environ['START_PHASE'], 'status': 'failed', 'error': 'GitHub Actions pipeline job failed'})
+          sig = base64.b64encode(hmac.new(os.environ['CALLBACK_SECRET'].encode(), body.encode(), hashlib.sha256).digest()).decode()
+          print(json.dumps({'payload': body, 'signature': sig}))
+          ")
+          payload_body=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin)['payload'])")
+          payload_sig=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin)['signature'])")
+          curl -s -X POST "$CALLBACK_URL" \
+            -H "Content-Type: application/json" \
+            -H "X-Callback-Signature: $payload_sig" \
+            -d "$payload_body" || true
 
-          $hmac = New-Object System.Security.Cryptography.HMACSHA256
-          $hmac.Key = [System.Text.Encoding]::UTF8.GetBytes($secret)
-          $hash = [System.Convert]::ToBase64String($hmac.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($payload)))
+    outputs:
+      task_id: ${{ steps.params.outputs.task_id }}
+      rerender_clips: ${{ steps.params.outputs.rerender_clips }}
+      enable_subtitle: ${{ steps.params.outputs.enable_subtitle }}
+      bgm_key: ${{ steps.params.outputs.bgm_key }}
+      language: ${{ steps.params.outputs.language }}
 
-          $headers = @{
-            "Content-Type" = "application/json"
-            "X-Callback-Signature" = $hash
-          }
+  # ══════════════════════════════════════════════════════════════
+  # Job 2: Render — 并行渲染分片（4 个 Ubuntu runner）
+  # 每个 job 下载 R2 产物，渲染分配的片段，上传回 R2
+  # ══════════════════════════════════════════════════════════════
+  render:
+    needs: pipeline
+    # 重渲染模式不需要渲染 job
+    if: ${{ needs.pipeline.outputs.rerender_clips == '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
 
-          try {
-            $resp = Invoke-RestMethod -Uri $env:CALLBACK_URL -Method Post -Headers $headers -Body $payload
-            Write-Host "Error callback response: $($resp | ConvertTo-Json -Compress)"
-          } catch {
-            Write-Host "Error callback failed: $($_.Exception.Message)"
-          }
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: 缓存 pip 依赖
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+          restore-keys: pip-${{ runner.os }}-
+          retention-days: 14
+
+      - name: 缓存 npm 依赖
+        uses: actions/cache@v4
+        with:
+          path: remotion/node_modules
+          key: npm-${{ runner.os }}-${{ hashFiles('remotion/package-lock.json') }}
+          restore-keys: npm-${{ runner.os }}-
+          retention-days: 14
+
+      - name: 安装系统依赖
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq chromium-browser imagemagick fonts-noto-cjk
+
+      - name: 安装 Python 依赖
+        run: |
+          pip install -r requirements.txt
+
+      - name: 安装 Node.js 依赖
+        run: |
+          cd remotion && npm install
+
+      - name: 配置 ffmpeg 路径
+        run: |
+          ffmpegPath=$(python -c "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())")
+          if [ -n "$ffmpegPath" ]; then
+            echo "IMAGEIO_FFMPEG_EXE=$ffmpegPath" >> $GITHUB_ENV
+            echo "ffmpeg: $ffmpegPath"
+          fi
+
+      - name: 渲染分片 ${{ matrix.shard }}
+        env:
+          TASK_ID: ${{ needs.pipeline.outputs.task_id }}
+          CALLBACK_URL: ${{ secrets.CALLBACK_URL }}
+          CALLBACK_SECRET: ${{ secrets.CALLBACK_SECRET }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ENABLE_SUBTITLE: ${{ needs.pipeline.outputs.enable_subtitle }}
+        shell: bash
+        run: |
+          cmd=(
+            "python" "main.py"
+            "--render-shard" "${{ matrix.shard }}"
+            "--render-shards" "4"
+            "--render-workers" "4"
+            "--task-id" "$TASK_ID"
+            "--output-dir" "./output"
+            "--callback-url" "$CALLBACK_URL"
+            "--callback-secret" "$CALLBACK_SECRET"
+            "--r2-prefix" "tasks/$TASK_ID"
+            "--r2-bucket" "$R2_BUCKET_NAME"
+            "--r2-access-key-id" "$R2_ACCESS_KEY_ID"
+            "--r2-secret-access-key" "$R2_SECRET_ACCESS_KEY"
+            "--r2-endpoint" "$R2_ENDPOINT_URL"
+          )
+
+          if [ "$ENABLE_SUBTITLE" = "false" ]; then
+            cmd+=("--no-subtitle")
+          fi
+
+          echo "Running render shard ${{ matrix.shard }}: ${cmd[*]}"
+          "${cmd[@]}"
+          exit_code=$?
+          if [ $exit_code -ne 0 ]; then
+            echo "::error::Render shard ${{ matrix.shard }} failed with exit code $exit_code"
+            exit $exit_code
+          fi
+
+      - name: 发送错误回调
+        if: ${{ failure() }}
+        shell: bash
+        env:
+          TASK_ID: ${{ needs.pipeline.outputs.task_id }}
+          CALLBACK_URL: ${{ secrets.CALLBACK_URL }}
+          CALLBACK_SECRET: ${{ secrets.CALLBACK_SECRET }}
+        run: |
+          payload=$(python3 -c "
+          import json, hmac, hashlib, base64, os
+          body = json.dumps({'task_id': os.environ['TASK_ID'], 'phase': 'TTS_COMPOSE', 'status': 'failed', 'error': 'Render shard ${{ matrix.shard }} failed'})
+          sig = base64.b64encode(hmac.new(os.environ['CALLBACK_SECRET'].encode(), body.encode(), hashlib.sha256).digest()).decode()
+          print(json.dumps({'payload': body, 'signature': sig}))
+          ")
+          payload_body=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin)['payload'])")
+          payload_sig=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin)['signature'])")
+          curl -s -X POST "$CALLBACK_URL" \
+            -H "Content-Type: application/json" \
+            -H "X-Callback-Signature: $payload_sig" \
+            -d "$payload_body" || true
+
+  # ══════════════════════════════════════════════════════════════
+  # Job 3: Assembly — 下载所有片段，拼接最终视频
+  # 所有渲染分片完成后执行
+  # ══════════════════════════════════════════════════════════════
+  assembly:
+    needs: render
+    # 重渲染模式不需要拼接 job（main.py 的 rerender 模式已处理拼接）
+    if: ${{ needs.pipeline.outputs.rerender_clips == '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: 缓存 pip 依赖
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+          restore-keys: pip-${{ runner.os }}-
+          retention-days: 14
+
+      - name: 安装系统依赖
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq imagemagick fonts-noto-cjk
+
+      - name: 安装 Python 依赖
+        run: |
+          pip install -r requirements.txt
+
+      - name: 配置 ffmpeg 路径
+        run: |
+          ffmpegPath=$(python -c "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())")
+          if [ -n "$ffmpegPath" ]; then
+            echo "IMAGEIO_FFMPEG_EXE=$ffmpegPath" >> $GITHUB_ENV
+            echo "ffmpeg: $ffmpegPath"
+          fi
+
+      - name: 拼接最终视频
+        env:
+          TASK_ID: ${{ needs.pipeline.outputs.task_id }}
+          CALLBACK_URL: ${{ secrets.CALLBACK_URL }}
+          CALLBACK_SECRET: ${{ secrets.CALLBACK_SECRET }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ENABLE_SUBTITLE: ${{ needs.pipeline.outputs.enable_subtitle }}
+          BGM_KEY: ${{ needs.pipeline.outputs.bgm_key }}
+          LANGUAGE: ${{ needs.pipeline.outputs.language }}
+        shell: bash
+        run: |
+          cmd=(
+            "python" "main.py"
+            "--assemble-mode"
+            "--task-id" "$TASK_ID"
+            "--output-dir" "./output"
+            "--callback-url" "$CALLBACK_URL"
+            "--callback-secret" "$CALLBACK_SECRET"
+            "--r2-prefix" "tasks/$TASK_ID"
+            "--r2-bucket" "$R2_BUCKET_NAME"
+            "--r2-access-key-id" "$R2_ACCESS_KEY_ID"
+            "--r2-secret-access-key" "$R2_SECRET_ACCESS_KEY"
+            "--r2-endpoint" "$R2_ENDPOINT_URL"
+          )
+
+          if [ "$ENABLE_SUBTITLE" = "false" ]; then
+            cmd+=("--no-subtitle")
+          fi
+
+          if [ -n "$BGM_KEY" ]; then
+            if [[ "$BGM_KEY" == bgm/* ]]; then
+              bgm_filename=$(basename "$BGM_KEY")
+              local_bgm="assets/bgm/$bgm_filename"
+              echo "BGM_KEY is custom upload, downloading from R2: $BGM_KEY -> $local_bgm"
+              npx --yes wrangler r2 object get "$R2_BUCKET_NAME/$BGM_KEY" --file "$local_bgm" --remote 2>&1
+              if [ $? -ne 0 ]; then
+                echo "::error::Failed to download custom BGM from R2"
+                exit 1
+              fi
+              cmd+=("--bgm" "$local_bgm")
+            else
+              cmd+=("--bgm" "assets/bgm/$BGM_KEY")
+            fi
+          fi
+
+          echo "Running assembly: ${cmd[*]}"
+          "${cmd[@]}"
+          exit_code=$?
+          if [ $exit_code -ne 0 ]; then
+            echo "::error::Assembly failed with exit code $exit_code"
+            exit $exit_code
+          fi
 
       - name: 上传视频产物
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: generated-video-${{ env.TASK_ID }}
+          name: generated-video-${{ needs.pipeline.outputs.task_id }}
           path: output/**/*.mp4
           retention-days: 7

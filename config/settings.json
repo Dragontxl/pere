@@ -21,6 +21,7 @@
   "tts_speed": 1.0,
   "tts_pitch": 1.0,
   "multimodal_concurrency": 5,
+  "asset_match_concurrency": 4,
   "pexels_api_key": "",
   "tts_language": "zh"
 }
