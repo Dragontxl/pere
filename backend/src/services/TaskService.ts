@@ -243,7 +243,6 @@ export class TaskService {
         // One GitHub run executes the whole pipeline: the intermediate image
         // assets live only on that runner, so later phases cannot run on a
         // fresh checkout. Phase progress is reported through callbacks.
-        phase: 'SCENE_GEN',
         start_phase: 'SCENE_GEN',
         end_phase: 'TTS_COMPOSE',
       },
