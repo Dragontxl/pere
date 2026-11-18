@@ -2255,6 +2255,35 @@ def render_shard(
             audio_file = clip.get("audio_file")
             subtitle = clip.get("subtitle", "")
 
+            # R2 缓存检查：CI runner 工作目录始终为空，本地文件缓存永不命中
+            # 查 R2 中是否已有有效片段，有则直接下载复用，跳过渲染
+            seg_suffix = f"_{seg_idx}" if seg_idx else ""
+            final_clip_name = f"final_clip_{scene_id}{seg_suffix}.mp4"
+            r2_clip_key = f"{r2_prefix}/{final_clip_name}" if (r2_prefix and r2_config and client) else None
+
+            if r2_clip_key:
+                try:
+                    head = client.head_object(Bucket=r2_config["bucket"], Key=r2_clip_key)
+                    clip_size = head["ContentLength"]
+                    # 200KB 阈值：低于此值视为损坏/空片段（1帧0秒视频约35-130KB），重新渲染
+                    if clip_size > 204_800:
+                        local_clip = work_dir / final_clip_name
+                        client.download_file(r2_config["bucket"], r2_clip_key, str(local_clip))
+                        results[(scene_id, seg_idx)] = (scene, str(local_clip))
+                        rendered_count = len(results)
+                        if progress_cb:
+                            progress_cb(
+                                "VIDEO_COMPOSE",
+                                f"镜头 {scene_id} 段{seg_idx} 复用R2缓存",
+                                start_idx + rendered_count,
+                                total_clips,
+                                sub_phase="RENDER",
+                            )
+                        print(f"  ♻️ 镜头 {scene_id} 段{seg_idx}: 复用R2缓存片段 ({clip_size} bytes)")
+                        continue
+                except Exception:
+                    pass  # 片段不存在于 R2，需要渲染
+
             audio_seg_path = None
             if audio_file:
                 audio_seg_path = str(work_dir / audio_file)
