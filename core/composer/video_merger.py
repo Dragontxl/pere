@@ -5,6 +5,7 @@
 """
 
 import os
+import shutil
 import subprocess
 import tempfile
 from .moviepy_compat import VideoFileClip, AudioFileClip, set_audio, subclip
@@ -12,12 +13,24 @@ from .moviepy_compat import VideoFileClip, AudioFileClip, set_audio, subclip
 # 系统 ffmpeg 和 ffprobe 路径
 FFMPEG_EXE = os.environ.get("IMAGEIO_FFMPEG_EXE", "ffmpeg")
 
-# 从 ffmpeg 路径推导 ffprobe 路径（同目录，仅改文件名）
-if os.path.basename(FFMPEG_EXE).lower().startswith("ffmpeg"):
-    ffprobe_dir = os.path.dirname(FFMPEG_EXE)
-    FFPROBE_EXE = os.path.join(ffprobe_dir, "ffprobe.exe")
-else:
-    FFPROBE_EXE = os.environ.get("IMAGEIO_FFMPEG_EXE", "ffprobe").replace("ffmpeg", "ffprobe")
+def _resolve_ffprobe() -> str:
+    """解析 ffprobe 可执行文件路径，兼容 Windows(.exe) 和 Linux(无后缀)"""
+    # 优先用 shutil.which 在系统 PATH 中查找
+    probed = shutil.which("ffprobe")
+    if probed:
+        return probed
+
+    # 从 ffmpeg 路径推导（同目录，先试 ffprobe.exe 再试 ffprobe）
+    ffmpeg_dir = os.path.dirname(FFMPEG_EXE)
+    for suffix in ("ffprobe.exe", "ffprobe"):
+        candidate = os.path.join(ffmpeg_dir, suffix)
+        if os.path.exists(candidate):
+            return candidate
+
+    # 兜底：返回 "ffprobe"，让 subprocess 在 PATH 中查找
+    return "ffprobe"
+
+FFPROBE_EXE = _resolve_ffprobe()
 
 
 def merge_clips_stream_copy(clip_paths: list, output_path: str) -> str:

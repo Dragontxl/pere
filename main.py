@@ -1196,15 +1196,19 @@ def _validate_clip(clip_path: str) -> bool:
     if os.path.getsize(clip_path) < 204_800:
         return False
 
-    # ffprobe 检查帧数和时长
-    ffmpeg_exe = os.environ.get("IMAGEIO_FFMPEG_EXE", "ffmpeg")
-    ffprobe_exe = os.path.join(os.path.dirname(ffmpeg_exe), "ffprobe.exe")
-    if not os.path.exists(ffprobe_exe):
-        # Linux 上可能没有 .exe 后缀
-        ffprobe_exe = os.path.join(os.path.dirname(ffmpeg_exe), "ffprobe")
-    if not os.path.exists(ffprobe_exe):
-        # 兜底：用 ffmpeg 的 -i 输出解析（不太可靠但总比没有好）
-        return True  # 无法验证时不拦截，交给后续流程处理
+    # ffprobe 检查帧数和时长（跨平台解析：优先 shutil.which，再从 ffmpeg 同目录推导）
+    import shutil as _shutil
+    ffprobe_exe = _shutil.which("ffprobe")
+    if not ffprobe_exe:
+        ffmpeg_exe = os.environ.get("IMAGEIO_FFMPEG_EXE", "ffmpeg")
+        for suffix in ("ffprobe.exe", "ffprobe"):
+            candidate = os.path.join(os.path.dirname(ffmpeg_exe), suffix)
+            if os.path.exists(candidate):
+                ffprobe_exe = candidate
+                break
+    if not ffprobe_exe:
+        # 无法找到 ffprobe，不拦截，交给后续流程处理
+        return True
 
     try:
         import subprocess
