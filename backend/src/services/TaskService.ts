@@ -541,14 +541,19 @@ export class TaskService {
 
     if (totalCount > 0) {
       const phaseProgress = Math.round((processedCount / totalCount) * 100);
-      const progress = Math.round((phaseIndex / phasesCount) * 100 + (phaseProgress / 100) * (100 / phasesCount));
+      // Cap at 99% during phase execution: 100% is only set by handleTaskComplete
+      // when the task is actually finished. Without this cap, the last phase
+      // (TTS_COMPOSE) reaching phaseProgress=100% would show overall progress=100%
+      // even though sub-steps (e.g. rendering) may still be running.
+      const rawProgress = Math.round((phaseIndex / phasesCount) * 100 + (phaseProgress / 100) * (100 / phasesCount));
+      const progress = Math.min(rawProgress, 99);
 
       // These counters represent the current phase's latest values, NOT cumulative
       // across callbacks. Each callback reports the current processed/total/failed
       // for the phase; per-phase history is preserved in phase_details JSON.
       await this.env.DB.prepare(`
         UPDATE tasks SET
-          progress = MAX(progress, ?),
+          progress = MIN(MAX(progress, ?), 99),
           current_phase = ?,
           status = ?,
           status_message = ?,
@@ -568,7 +573,7 @@ export class TaskService {
 
       await this.env.DB.prepare(`
         UPDATE tasks SET
-          progress = MAX(progress, ?),
+          progress = MIN(MAX(progress, ?), 99),
           current_phase = ?,
           status = ?,
           status_message = ?,
