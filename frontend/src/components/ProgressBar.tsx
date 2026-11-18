@@ -8,10 +8,13 @@ interface ProgressBarProps {
 }
 
 const phases = [
+  { key: 'ARTICLE_PARSE', label: '文章解析' },
   { key: 'SCENE_GEN', label: '分镜生成' },
+  { key: 'IMAGE_DOWNLOAD', label: '素材下载' },
   { key: 'ASSET_MATCH', label: '素材匹配' },
-  { key: 'REMOTION_RENDER', label: 'Remotion 渲染' },
-  { key: 'TTS_COMPOSE', label: '语音合成' },
+  { key: 'RENDER_DECISION', label: '渲染决策' },
+  { key: 'TTS_SYNTH', label: '语音合成' },
+  { key: 'VIDEO_COMPOSE', label: '视频合成' },
 ];
 
 interface PhaseDetail {

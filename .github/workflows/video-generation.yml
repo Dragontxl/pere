@@ -38,23 +38,29 @@ on:
       start_phase:
         description: '起始阶段'
         required: false
-        default: 'SCENE_GEN'
+        default: 'ARTICLE_PARSE'
         type: choice
         options:
+          - ARTICLE_PARSE
           - SCENE_GEN
+          - IMAGE_DOWNLOAD
           - ASSET_MATCH
-          - REMOTION_RENDER
-          - TTS_COMPOSE
+          - RENDER_DECISION
+          - TTS_SYNTH
+          - VIDEO_COMPOSE
       end_phase:
         description: '结束阶段'
         required: false
-        default: 'TTS_COMPOSE'
+        default: 'VIDEO_COMPOSE'
         type: choice
         options:
+          - ARTICLE_PARSE
           - SCENE_GEN
+          - IMAGE_DOWNLOAD
           - ASSET_MATCH
-          - REMOTION_RENDER
-          - TTS_COMPOSE
+          - RENDER_DECISION
+          - TTS_SYNTH
+          - VIDEO_COMPOSE
       enable_subtitle:
         description: '是否烧录字幕'
         required: false
@@ -89,7 +95,7 @@ env:
 
 jobs:
   # ══════════════════════════════════════════════════════════════
-  # Job 1: Pipeline — SCENE_GEN → ASSET_MATCH → REMOTION_RENDER → TTS
+  # Job 1: Pipeline — ARTICLE_PARSE → SCENE_GEN → IMAGE_DOWNLOAD → ASSET_MATCH → RENDER_DECISION → TTS_SYNTH
   # 产出：scenes.json, match_results.json, decisions.json, render_manifest.json,
   #       音频段, 图片 — 全部上传 R2 供渲染 job 下载
   # ══════════════════════════════════════════════════════════════
@@ -172,8 +178,8 @@ jobs:
             language=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('language','zh'))")
             enable_subtitle=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('enable_subtitle','true'))")
             bgm_key=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('bgm_key',''))")
-            start_phase=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('start_phase','SCENE_GEN'))")
-            end_phase=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('end_phase','TTS_COMPOSE'))")
+            start_phase=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('start_phase','ARTICLE_PARSE'))")
+            end_phase=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('end_phase','VIDEO_COMPOSE'))")
             rerender_clips=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('rerender_clips',''))")
           else
             task_id="${{ inputs.task_id }}"
@@ -193,8 +199,8 @@ jobs:
           [ -z "$article_source" ] && article_source="pasted"
           [ -z "$orientation" ] && orientation="landscape"
           [ -z "$language" ] && language="zh"
-          [ -z "$start_phase" ] && start_phase="SCENE_GEN"
-          [ -z "$end_phase" ] && end_phase="TTS_COMPOSE"
+          [ -z "$start_phase" ] && start_phase="ARTICLE_PARSE"
+          [ -z "$end_phase" ] && end_phase="VIDEO_COMPOSE"
           [ -z "$bgm_key" ] && bgm_key=""
           [ -z "$rerender_clips" ] && rerender_clips=""
           if [ "$enable_subtitle" = "false" ] || [ "$enable_subtitle" = "False" ]; then
@@ -218,11 +224,11 @@ jobs:
           echo "END_PHASE=$end_phase" >> $GITHUB_ENV
           echo "RERENDER_CLIPS=$rerender_clips" >> $GITHUB_ENV
 
-          phase_order=(SCENE_GEN ASSET_MATCH REMOTION_RENDER TTS_COMPOSE)
+          phase_order=(ARTICLE_PARSE SCENE_GEN IMAGE_DOWNLOAD ASSET_MATCH RENDER_DECISION TTS_SYNTH VIDEO_COMPOSE)
           start_idx=$(printf "%s\n" "${phase_order[@]}" | grep -n "$start_phase" | head -1 | cut -d: -f1)
           end_idx=$(printf "%s\n" "${phase_order[@]}" | grep -n "$end_phase" | head -1 | cut -d: -f1)
           [ -z "$start_idx" ] && start_idx=1
-          [ -z "$end_idx" ] && end_idx=4
+          [ -z "$end_idx" ] && end_idx=7
           [ "$end_idx" -lt "$start_idx" ] && end_idx=$start_idx
 
           echo "START_PHASE_IDX=$((start_idx - 1))" >> $GITHUB_ENV
@@ -524,7 +530,7 @@ jobs:
         run: |
           payload=$(python3 -c "
           import json, hmac, hashlib, base64, os
-          body = json.dumps({'task_id': os.environ['TASK_ID'], 'phase': 'TTS_COMPOSE', 'status': 'failed', 'error': 'Render shard ${{ matrix.shard }} failed'})
+          body = json.dumps({'task_id': os.environ['TASK_ID'], 'phase': 'VIDEO_COMPOSE', 'status': 'failed', 'error': 'Render shard ${{ matrix.shard }} failed'})
           sig = base64.b64encode(hmac.new(os.environ['CALLBACK_SECRET'].encode(), body.encode(), hashlib.sha256).digest()).decode()
           print(json.dumps({'payload': body, 'signature': sig}))
           ")

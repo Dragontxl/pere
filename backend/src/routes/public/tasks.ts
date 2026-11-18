@@ -151,7 +151,7 @@ taskRoutes.post('/:id/start-phase/:phase', async (c) => {
   const phase = c.req.param('phase') as any;
 
   try {
-    const validPhases = ['SCENE_GEN', 'ASSET_MATCH', 'REMOTION_RENDER', 'TTS_COMPOSE'];
+    const validPhases = ['ARTICLE_PARSE', 'SCENE_GEN', 'IMAGE_DOWNLOAD', 'ASSET_MATCH', 'RENDER_DECISION', 'TTS_SYNTH', 'VIDEO_COMPOSE'];
     if (!validPhases.includes(phase)) {
       return c.json({ code: 400, data: null, msg: 'Invalid phase' }, 400);
     }
@@ -187,7 +187,7 @@ taskRoutes.get('/:id/check-phase/:phase', async (c) => {
   const service = new TaskService(c.env as Bindings);
   const phase = c.req.param('phase') as any;
 
-  const validPhases = ['SCENE_GEN', 'ASSET_MATCH', 'REMOTION_RENDER', 'TTS_COMPOSE'];
+  const validPhases = ['ARTICLE_PARSE', 'SCENE_GEN', 'IMAGE_DOWNLOAD', 'ASSET_MATCH', 'RENDER_DECISION', 'TTS_SYNTH', 'VIDEO_COMPOSE'];
   if (!validPhases.includes(phase)) {
     return c.json({ code: 400, data: null, msg: 'Invalid phase' }, 400);
   }

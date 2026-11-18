@@ -204,14 +204,14 @@ def parse_args():
     parser.add_argument(
         "--start-phase",
         type=str,
-        choices=["SCENE_GEN", "ASSET_MATCH", "REMOTION_RENDER", "TTS_COMPOSE"],
+        choices=["ARTICLE_PARSE", "SCENE_GEN", "IMAGE_DOWNLOAD", "ASSET_MATCH", "RENDER_DECISION", "TTS_SYNTH", "VIDEO_COMPOSE"],
         default=None,
         help="起始阶段（CI 模式，控制从哪个环节开始执行）"
     )
     parser.add_argument(
         "--end-phase",
         type=str,
-        choices=["SCENE_GEN", "ASSET_MATCH", "REMOTION_RENDER", "TTS_COMPOSE"],
+        choices=["ARTICLE_PARSE", "SCENE_GEN", "IMAGE_DOWNLOAD", "ASSET_MATCH", "RENDER_DECISION", "TTS_SYNTH", "VIDEO_COMPOSE"],
         default=None,
         help="结束阶段（CI 模式，控制执行到哪个环节）"
     )
@@ -317,13 +317,21 @@ def setup_environment(config: dict, render_params: dict) -> tuple:
 
 # ── CI 回调与 R2 上传 ──────────────────────────────────────────────────
 
-_PHASE_ORDER = ["SCENE_GEN", "ASSET_MATCH", "REMOTION_RENDER", "TTS_COMPOSE"]
+_PHASE_ORDER = [
+    "ARTICLE_PARSE",
+    "SCENE_GEN",
+    "IMAGE_DOWNLOAD",
+    "ASSET_MATCH",
+    "RENDER_DECISION",
+    "TTS_SYNTH",
+    "VIDEO_COMPOSE",
+]
 
 
 def get_phase_range(start_phase: str | None, end_phase: str | None) -> tuple[int, int]:
-    """返回 (start_idx, end_idx)，覆盖从 SCENE_GEN 到 TTS_COMPOSE"""
+    """返回 (start_idx, end_idx)，覆盖从 ARTICLE_PARSE 到 VIDEO_COMPOSE"""
     start = _PHASE_ORDER.index(start_phase) if start_phase and start_phase in _PHASE_ORDER else 0
-    end = _PHASE_ORDER.index(end_phase) if end_phase and end_phase in _PHASE_ORDER else 3
+    end = _PHASE_ORDER.index(end_phase) if end_phase and end_phase in _PHASE_ORDER else 6
     if end < start:
         end = start
     return start, end
@@ -743,19 +751,128 @@ def get_article(client, config: dict, model: str) -> str:
         return select_and_get_article(client, model)
 
 
-def download_and_match(scenes: list, zhipu_client, config: dict, temp_dir: Path, work_dir: Path, agnes_client=None, model: str = "agnes-3.0-flash", progress_cb=None, r2_prefix=None, r2_config=None) -> dict:
-    """环节3：为每个镜头下载候选图片并做匹配分析
+def download_scene_images(
+    scenes: list,
+    config: dict,
+    temp_dir: Path,
+    progress_cb=None,
+    r2_prefix=None,
+    r2_config=None,
+    agnes_client=None,
+    model: str = "agnes-3.0-flash",
+) -> dict:
+    """环节3：为每个镜头下载候选图片并上传到 R2
 
     Args:
         scenes: 镜头列表
-        zhipu_client: 智谱AI客户端（多模态评审用）
         config: 全局配置
         temp_dir: 临时目录
-        work_dir: 工作目录
+        progress_cb: 进度回调函数，签名 (phase, message, processed, total, sub_phase=None)
+        r2_prefix: R2 前缀
+        r2_config: R2 配置
         agnes_client: Agnes客户端（用于中文关键词翻译为英文）
         model: Agnes模型名称
+
+    Returns:
+        {scene_id: [image_path, ...]}
+    """
+    max_images = config.get("max_download_images", 5)
+    chromedriver_path = config.get("chromedriver_path", "")
+
+    # 图片方向：CLI 参数优先，其次配置文件，默认横屏
+    image_orientation = args.orientation or config.get("image_orientation", "landscape")
+    print(f"📐 图片方向: {image_orientation}（每镜头下载 {max_images} 张）")
+
+    # 并发度：默认 4，可通过配置调整
+    download_concurrency = config.get("asset_match_concurrency", 4)
+    print(f"⚡ 素材下载并发: {download_concurrency} 路")
+
+    image_paths_map = {}
+
+    def _download_one(scene):
+        """下载单个镜头的候选图片并上传到 R2"""
+        try:
+            print(f"\n  ── 镜头 {scene.scene_id} ──")
+            print(f"  描述: {scene.visual_description}")
+
+            image_dir = temp_dir / f"scene_{scene.scene_id}"
+            image_dir.mkdir(parents=True, exist_ok=True)
+
+            # 下载候选图片前，将中文关键词翻译为英文（Pexels 英文搜索效果更好）
+            search_kws = scene.search_keywords
+            if agnes_client is not None and search_kws:
+                search_kws = _translate_keywords(search_kws, agnes_client, model)
+
+            image_paths = download_pexels_images(
+                keywords=search_kws,
+                output_dir=str(image_dir),
+                max_count=max_images,
+                driver_path=chromedriver_path if chromedriver_path else None,
+                orientation=image_orientation,
+                session=None,  # 不共享会话：API 通道无需会话；Selenium 兜底时各线程独立创建
+                api_key=config.get("pexels_api_key")
+            )
+
+            if not image_paths:
+                print(f"    ❌ 未下载到图片")
+                return scene.scene_id, []
+
+            # 边下载边上传图片到 R2（供渲染 job 下载，boto3 上传是 I/O 操作不阻塞下载）
+            if r2_prefix and r2_config:
+                for img in sorted(image_dir.iterdir()):
+                    if img.suffix.lower() not in (".jpg", ".jpeg", ".png", ".webp"):
+                        continue
+                    r2_img_key = f"{r2_prefix}/images/{image_dir.name}/{img.name}"
+                    upload_to_r2(
+                        str(img), r2_img_key,
+                        r2_config["bucket"],
+                        r2_config["access_key_id"],
+                        r2_config["secret_access_key"],
+                        r2_config["endpoint"],
+                    )
+
+            return scene.scene_id, image_paths
+        except Exception as e:
+            print(f"    ❌ 镜头 {scene.scene_id} 素材下载异常: {e}")
+            return scene.scene_id, []
+
+    # 并行下载所有镜头
+    with ThreadPoolExecutor(max_workers=download_concurrency) as pool:
+        futures = {pool.submit(_download_one, s): s for s in scenes}
+        done = 0
+        for future in as_completed(futures):
+            scene = futures[future]
+            try:
+                scene_id, image_paths = future.result()
+                image_paths_map[scene_id] = image_paths
+            except Exception as e:
+                print(f"  ❌ 镜头 {scene.scene_id} 素材下载失败: {e}")
+                image_paths_map[scene.scene_id] = []
+
+            done += 1
+            if progress_cb:
+                progress_cb("IMAGE_DOWNLOAD", f"镜头 {scene.scene_id} 素材下载完成", done, len(scenes))
+            if done % 10 == 0 or done == len(scenes):
+                print(f"  📊 素材下载进度 {done}/{len(scenes)}")
+
+    return image_paths_map
+
+
+def match_scene_images(
+    scenes: list,
+    image_paths_map: dict,
+    zhipu_client,
+    config: dict,
+    progress_cb=None,
+) -> dict:
+    """环节4：对已下载的图片做 CLIP 匹配和多模态精评
+
+    Args:
+        scenes: 镜头列表
+        image_paths_map: {scene_id: [image_path, ...]} 来自 download_scene_images
+        zhipu_client: 智谱AI客户端（多模态评审用）
+        config: 全局配置
         progress_cb: 进度回调函数，签名 (phase, message, processed, total, sub_phase=None)
-            sub_phase 用于 TTS_COMPOSE：'TTS' 表示语音合成，'RENDER' 表示视频渲染
 
     Returns:
         {scene_id: [{"path":..., "score":...}, ...]}
@@ -783,16 +900,9 @@ def download_and_match(scenes: list, zhipu_client, config: dict, temp_dir: Path,
     elif args.skip_remotion:
         print("⏭️ 已跳过多模态精评")
 
-    max_images = config.get("max_download_images", 5)
-    chromedriver_path = config.get("chromedriver_path", "")
-
-    # 图片方向：CLI 参数优先，其次配置文件，默认横屏
-    image_orientation = args.orientation or config.get("image_orientation", "landscape")
-    print(f"📐 图片方向: {image_orientation}（每镜头下载 {max_images} 张）")
-
-    # 并发度：默认 4，可通过配置调整
-    asset_match_concurrency = config.get("asset_match_concurrency", 4)
-    print(f"⚡ 素材匹配并发: {asset_match_concurrency} 路")
+    # 并发度：默认 4
+    match_concurrency = config.get("asset_match_concurrency", 4)
+    print(f"⚡ 素材匹配并发: {match_concurrency} 路")
 
     match_results = {}
 
@@ -801,33 +911,12 @@ def download_and_match(scenes: list, zhipu_client, config: dict, temp_dir: Path,
     import threading
     clip_lock = threading.Lock()
 
-    def _process_scene(scene):
-        """处理单个镜头：下载图片 → CLIP 匹配 → 多模态精评"""
+    def _match_one(scene):
+        """对单个镜头的已下载图片做 CLIP 匹配 + 多模态精评"""
         try:
-            print(f"\n  ── 镜头 {scene.scene_id} ──")
-            print(f"  描述: {scene.visual_description}")
-
-            # 下载候选图片（API 通道线程安全；Selenium 兜底时每个线程独立创建会话）
-            image_dir = temp_dir / f"scene_{scene.scene_id}"
-            image_dir.mkdir(parents=True, exist_ok=True)
-
-            # 下载候选图片前，将中文关键词翻译为英文（Pexels 英文搜索效果更好）
-            search_kws = scene.search_keywords
-            if agnes_client is not None and search_kws:
-                search_kws = _translate_keywords(search_kws, agnes_client, model)
-
-            image_paths = download_pexels_images(
-                keywords=search_kws,
-                output_dir=str(image_dir),
-                max_count=max_images,
-                driver_path=chromedriver_path if chromedriver_path else None,
-                orientation=image_orientation,
-                session=None,  # 不共享会话：API 通道无需会话；Selenium 兜底时各线程独立创建
-                api_key=config.get("pexels_api_key")
-            )
-
+            image_paths = image_paths_map.get(scene.scene_id, [])
             if not image_paths:
-                print(f"    ❌ 未下载到图片，跳过匹配")
+                print(f"    ❌ 镜头 {scene.scene_id} 无图片，跳过匹配")
                 return scene.scene_id, []
 
             # CLIP 匹配（共享模型，加锁）
@@ -852,28 +941,14 @@ def download_and_match(scenes: list, zhipu_client, config: dict, temp_dir: Path,
                 matches = [{"path": image_paths[0], "score": 0.0}]
                 print(f"    ⚠️ 使用第一张图片（无 CLIP 匹配）")
 
-            # 边下载边上传图片到 R2（供渲染 job 下载，boto3 上传是 I/O 操作不阻塞匹配）
-            if r2_prefix and r2_config:
-                for img in sorted(image_dir.iterdir()):
-                    if img.suffix.lower() not in (".jpg", ".jpeg", ".png", ".webp"):
-                        continue
-                    r2_img_key = f"{r2_prefix}/images/{image_dir.name}/{img.name}"
-                    upload_to_r2(
-                        str(img), r2_img_key,
-                        r2_config["bucket"],
-                        r2_config["access_key_id"],
-                        r2_config["secret_access_key"],
-                        r2_config["endpoint"],
-                    )
-
             return scene.scene_id, matches
         except Exception as e:
             print(f"    ❌ 镜头 {scene.scene_id} 素材匹配异常: {e}")
             return scene.scene_id, []
 
     # 并行处理所有镜头
-    with ThreadPoolExecutor(max_workers=asset_match_concurrency) as pool:
-        futures = {pool.submit(_process_scene, s): s for s in scenes}
+    with ThreadPoolExecutor(max_workers=match_concurrency) as pool:
+        futures = {pool.submit(_match_one, s): s for s in scenes}
         done = 0
         for future in as_completed(futures):
             scene = futures[future]
@@ -1732,7 +1807,7 @@ def compose_video(
         render_params: 渲染参数
         work_dir: 工作目录
         progress_cb: 进度回调函数，签名 (phase, message, processed, total, sub_phase=None)
-            sub_phase 用于 TTS_COMPOSE：'TTS' 表示语音合成，'RENDER' 表示视频渲染
+            TTS 阶段使用 phase='TTS_SYNTH'；渲染阶段使用 phase='VIDEO_COMPOSE' + sub_phase='RENDER'
         r2_prefix: R2 前缀（用于保存片段到 R2 供缓存复用）
         r2_config: R2 配置
         task_id: 任务ID
@@ -1780,7 +1855,7 @@ def compose_video(
                           f"按 {scene.duration:.1f}s 渲染（无解说音轨）")
 
                 if progress_cb:
-                    progress_cb("TTS_COMPOSE", f"镜头 {scene.scene_id} 语音合成完成", done, len(scenes), sub_phase="TTS")
+                    progress_cb("TTS_SYNTH", f"镜头 {scene.scene_id} 语音合成完成", done, len(scenes))
 
                 if done % 10 == 0 or done == len(scenes):
                     print(f"  🎙️ 语音进度 {done}/{len(scenes)}")
@@ -1852,7 +1927,7 @@ def compose_video(
                             for segs in audio_segments.values()
                         )
                         progress_cb(
-                            "TTS_COMPOSE",
+                            "VIDEO_COMPOSE",
                             f"镜头 {rendered_scene.scene_id} 段{seg_idx} 渲染完成",
                             rendered_count,
                             total_expected,
@@ -1861,7 +1936,7 @@ def compose_video(
             except Exception as e:
                 print(f"  ❌ 镜头 {scene.scene_id} 段{seg_idx}: 渲染失败: {e}")
                 if progress_cb:
-                    progress_cb("TTS_COMPOSE", f"镜头 {scene.scene_id} 段{seg_idx} 渲染失败", 0, len(scenes), sub_phase="RENDER")
+                    progress_cb("VIDEO_COMPOSE", f"镜头 {scene.scene_id} 段{seg_idx} 渲染失败", 0, len(scenes), sub_phase="RENDER")
 
     # 按场景顺序、段顺序排列，确保拼接顺序正确
     for scene in scenes:
@@ -1956,9 +2031,8 @@ def prepare_render_artifacts(
 ) -> str:
     """准备渲染产物：TTS 合成语音 + 生成渲染清单 + 上传音频/图片到 R2
 
-    将 TTS_COMPOSE 拆分为 TTS（此函数）和 RENDER（render_shard）两个子阶段。
-    此函数完成语音合成，生成 render_manifest.json，上传音频和图片到 R2，
-    供并行渲染 workflow 下载使用。
+    TTS_SYNTH 阶段完成语音合成，生成 render_manifest.json，上传音频和图片到 R2，
+    供 VIDEO_COMPOSE 阶段的并行渲染 workflow 下载使用。
 
     Args:
         scenes: 镜头列表
@@ -2015,7 +2089,7 @@ def prepare_render_artifacts(
                             )
 
                 if progress_cb:
-                    progress_cb("TTS_COMPOSE", f"镜头 {scene.scene_id} 语音合成完成", done, len(scenes), sub_phase="TTS")
+                    progress_cb("TTS_SYNTH", f"镜头 {scene.scene_id} 语音合成完成", done, len(scenes))
 
                 if done % 10 == 0 or done == len(scenes):
                     print(f"  🎙️ 语音进度 {done}/{len(scenes)}")
@@ -2210,7 +2284,7 @@ def render_shard(
                     rendered_count = len(results)
                     if progress_cb:
                         progress_cb(
-                            "TTS_COMPOSE",
+                            "VIDEO_COMPOSE",
                             f"镜头 {scene_id} 段{seg_idx} 渲染完成",
                             start_idx + rendered_count,
                             total_clips,
@@ -2220,7 +2294,7 @@ def render_shard(
                 print(f"  ❌ 镜头 {scene_id} 段{seg_idx}: 渲染失败: {e}")
                 if progress_cb:
                     progress_cb(
-                        "TTS_COMPOSE",
+                        "VIDEO_COMPOSE",
                         f"镜头 {scene_id} 段{seg_idx} 渲染失败",
                         start_idx + len(results),
                         total_clips,
@@ -2377,7 +2451,7 @@ def main():
                 send_callback(
                     {
                         "task_id": args.task_id,
-                        "phase": "TTS_COMPOSE",
+                        "phase": "VIDEO_COMPOSE",
                         "status": "completed",
                         "message": "重渲染完成",
                         "final_video_key": f"{args.r2_prefix}/final_output.mp4" if (args.r2_bucket and args.r2_prefix) else "final_output.mp4",
@@ -2438,7 +2512,7 @@ def main():
             traceback.print_exc()
             if args.task_id:
                 send_callback(
-                    {"task_id": args.task_id, "phase": "TTS_COMPOSE", "status": "failed", "error": str(e)},
+                    {"task_id": args.task_id, "phase": "VIDEO_COMPOSE", "status": "failed", "error": str(e)},
                     args.callback_url, args.callback_secret,
                 )
             sys.exit(1)
@@ -2475,7 +2549,7 @@ def main():
                 send_callback(
                     {
                         "task_id": args.task_id,
-                        "phase": "TTS_COMPOSE",
+                        "phase": "VIDEO_COMPOSE",
                         "status": "completed",
                         "message": "视频拼接完成",
                         "final_video_key": f"{args.r2_prefix}/final_output.mp4" if r2_config else "final_output.mp4",
@@ -2495,7 +2569,7 @@ def main():
             traceback.print_exc()
             if args.task_id:
                 send_callback(
-                    {"task_id": args.task_id, "phase": "TTS_COMPOSE", "status": "failed", "error": str(e)},
+                    {"task_id": args.task_id, "phase": "VIDEO_COMPOSE", "status": "failed", "error": str(e)},
                     args.callback_url, args.callback_secret,
                 )
             sys.exit(1)
@@ -2554,13 +2628,14 @@ def main():
             print(f"☁️ R2 存储: {args.r2_prefix}")
 
         # ══════════════════════════════════════════════════════════════
-        # Phase 0: SCENE_GEN — 文章 → 分镜
+        # Phase 0: ARTICLE_PARSE — 获取文章 + 切块
         # ══════════════════════════════════════════════════════════════
-        scenes = None
+        chunks = None
+        article = None
         if start_idx <= 0:
-            _cb_progress(start_phase_name, "开始生成文章和分镜")
+            _cb_progress(start_phase_name, "开始获取并解析文章")
             # 环节1：获取文章
-            print("\n[1/6] 获取文章...")
+            print("\n[1/7] 获取文章...")
             if args.article_file:
                 article = get_article_from_file(args.article_file)
                 print(f"✅ 从文件读取文章，共 {len(article)} 字")
@@ -2581,8 +2656,8 @@ def main():
                 f.write(article)
             save_phase_artifact(str(article_path), args.task_id, args.r2_prefix, r2_config)
 
-            # 环节2：文章切块 + LLM 分镜
-            print("\n[2/6] 切分文章并生成分镜...")
+            # 文章切块
+            print("\n[2/7] 切分文章...")
             chunks = split_into_chunks(article)
             if not chunks:
                 print("❌ 文章切块失败，内容为空")
@@ -2591,6 +2666,46 @@ def main():
             print(f"✅ 文章切成 {len(chunks)} 个解说片段"
                   f"（约 {total_chars} 字，预计 {total_chars / 5.2 / 60:.1f} 分钟）")
 
+            # 保存切块结果
+            chunks_path = work_dir / "chunks.json"
+            with open(chunks_path, "w", encoding="utf-8") as f:
+                json.dump(chunks, f, ensure_ascii=False, indent=2)
+            save_phase_artifact(str(chunks_path), args.task_id, args.r2_prefix, r2_config)
+
+            _cb_progress("ARTICLE_PARSE", f"文章已解析并切分为 {len(chunks)} 个片段", len(chunks), len(chunks))
+            _cb_phase_done("ARTICLE_PARSE")
+
+        else:
+            # 从 R2 或本地加载切块结果
+            chunks_path = load_phase_artifact(
+                "chunks.json", work_dir, args.task_id, args.r2_prefix, r2_config
+            )
+            if chunks_path:
+                with open(chunks_path, "r", encoding="utf-8") as f:
+                    chunks = json.load(f)
+                print(f"✅ 从产物加载 {len(chunks)} 个解说片段")
+            else:
+                # 回退：加载 article.txt 并重新切块
+                article_path = load_phase_artifact(
+                    "article.txt", work_dir, args.task_id, args.r2_prefix, r2_config
+                )
+                if article_path:
+                    with open(article_path, "r", encoding="utf-8") as f:
+                        article = f.read()
+                    chunks = split_into_chunks(article)
+                    print(f"✅ 从文章重新切分为 {len(chunks)} 个片段")
+                else:
+                    print("❌ 无法加载 chunks.json 或 article.txt，请确保 ARTICLE_PARSE 阶段已完成")
+                    sys.exit(1)
+
+        # ══════════════════════════════════════════════════════════════
+        # Phase 1: SCENE_GEN — 切块 → 分镜
+        # ══════════════════════════════════════════════════════════════
+        scenes = None
+        if start_idx <= 1:
+            _cb_progress("SCENE_GEN", "开始生成分镜镜头")
+            # 环节2：LLM 分镜生成
+            print("\n[3/7] 生成分镜...")
             scenes = generate_scenes_from_chunks(chunks, client, model)
             print(f"✅ 生成 {len(scenes)} 个镜头")
 
@@ -2623,18 +2738,53 @@ def main():
                 sys.exit(1)
 
         # ══════════════════════════════════════════════════════════════
-        # Phase 1: ASSET_MATCH — 分镜 → 素材匹配结果
+        # Phase 2: IMAGE_DOWNLOAD — 分镜 → 候选图片下载
         # ══════════════════════════════════════════════════════════════
-        match_results = None
-        if start_idx <= 1:
-            _cb_progress("ASSET_MATCH", "开始下载并匹配图片素材")
-            # 环节3：素材下载与匹配
-            print("\n[3/6] 下载并匹配图片素材...")
-            match_results = download_and_match(
-                scenes, zhipu_client, config, temp_dir, work_dir,
+        image_paths_map = None
+        if start_idx <= 2:
+            _cb_progress("IMAGE_DOWNLOAD", "开始下载候选图片素材")
+            # 环节3：素材下载
+            print("\n[4/7] 下载候选图片...")
+            image_paths_map = download_scene_images(
+                scenes, config, temp_dir,
                 progress_cb=_cb_progress,
                 r2_prefix=args.r2_prefix,
                 r2_config=r2_config,
+                agnes_client=client,
+                model=model,
+            )
+
+            _cb_progress("IMAGE_DOWNLOAD", f"已下载 {len(image_paths_map)} 个镜头的图片", len(image_paths_map), len(scenes))
+            _cb_phase_done("IMAGE_DOWNLOAD")
+
+        else:
+            # 从 R2 下载图片（render job 也需要）
+            downloaded = download_images_from_r2(
+                temp_dir, args.r2_prefix, r2_config
+            ) if r2_config else 0
+            # 重建 image_paths_map 从已下载的图片
+            image_paths_map = {}
+            for scene in scenes:
+                image_dir = temp_dir / f"scene_{scene.scene_id}"
+                if image_dir.is_dir():
+                    imgs = sorted([
+                        str(img) for img in image_dir.iterdir()
+                        if img.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp")
+                    ])
+                    image_paths_map[scene.scene_id] = imgs
+            print(f"✅ 从 R2 恢复 {len(image_paths_map)} 个镜头的图片")
+
+        # ══════════════════════════════════════════════════════════════
+        # Phase 3: ASSET_MATCH — 候选图片 → 匹配结果
+        # ══════════════════════════════════════════════════════════════
+        match_results = None
+        if start_idx <= 3:
+            _cb_progress("ASSET_MATCH", "开始匹配图片素材")
+            # 环节4：素材匹配（CLIP + 多模态精评）
+            print("\n[5/7] 匹配图片素材...")
+            match_results = match_scene_images(
+                scenes, image_paths_map, zhipu_client, config,
+                progress_cb=_cb_progress,
             )
 
             # 保存匹配结果
@@ -2658,26 +2808,26 @@ def main():
                 sys.exit(1)
 
         # ══════════════════════════════════════════════════════════════
-        # Phase 2: REMOTION_RENDER — 匹配结果 → 综合决策
+        # Phase 4: RENDER_DECISION — 匹配结果 → 综合决策
         # ══════════════════════════════════════════════════════════════
         decisions = None
-        if start_idx <= 2:
-            _cb_progress("REMOTION_RENDER", "开始分析 Remotion 适用性和综合决策")
-            # 环节4：Remotion 适用性分析
-            print("\n[4/6] 分析 Remotion 适用性...")
+        if start_idx <= 4:
+            _cb_progress("RENDER_DECISION", "开始分析 Remotion 适用性和综合决策")
+            # 环节5：Remotion 适用性分析
+            print("\n[6/7] 分析 Remotion 适用性...")
             remotion_decisions = analyze_scenes(scenes)
             remotion_count = sum(1 for d in remotion_decisions if d.use_remotion)
             print(f"✅ {remotion_count} 个镜头适合 Remotion，{len(scenes) - remotion_count} 个使用图片")
 
-            # 环节5：综合决策
-            print("\n[5/6] 综合决策...")
+            # 环节6：综合决策
+            print("\n[7/7] 综合决策...")
             score_threshold = config.get("match_score_threshold", 0.25)
             decisions = decide_scenes(scenes, match_results, remotion_decisions, score_threshold)
 
             for dec in decisions:
                 print(f"  镜头 {dec.scene_id}: {dec.implementation} — {dec.reason}")
 
-            _cb_progress("REMOTION_RENDER", f"已分析 {len(decisions)} 个镜头的 Remotion 适用性", len(decisions), len(decisions))
+            _cb_progress("RENDER_DECISION", f"已分析 {len(decisions)} 个镜头的渲染决策", len(decisions), len(decisions))
 
             # 保存决策
             decisions_path = work_dir / "decisions.json"
@@ -2694,7 +2844,7 @@ def main():
                 )
             save_phase_artifact(str(decisions_path), args.task_id, args.r2_prefix, r2_config)
 
-            _cb_phase_done("REMOTION_RENDER")
+            _cb_phase_done("RENDER_DECISION")
 
         else:
             decisions_path = load_phase_artifact(
@@ -2707,30 +2857,22 @@ def main():
                 decisions = [SceneDecision.from_dict(d) for d in dec_data]
                 print(f"✅ 从产物加载 {len(decisions)} 个决策")
             else:
-                print("❌ 无法加载 decisions.json，请确保 REMOTION_RENDER 阶段已完成")
+                print("❌ 无法加载 decisions.json，请确保 RENDER_DECISION 阶段已完成")
                 sys.exit(1)
 
         # ══════════════════════════════════════════════════════════════
-        # Phase 3: TTS_COMPOSE — 决策 → 最终视频
+        # Phase 5: TTS_SYNTH — 决策 → 语音合成
         # ══════════════════════════════════════════════════════════════
-        final_output = None
-        if start_idx <= 3:
-            _cb_progress("TTS_COMPOSE", "开始合成语音和视频")
-
-            # 下载已有的缓存片段（从 R2），避免重复渲染
-            if r2_config and args.task_id and args.r2_prefix:
-                cached = download_clips_from_r2(
-                    work_dir, args.task_id, args.r2_prefix, r2_config
-                )
-                if cached > 0:
-                    print(f"  ♻️ 从 R2 下载 {cached} 个缓存片段，将复用")
+        manifest_path = None
+        if start_idx <= 5:
+            _cb_progress("TTS_SYNTH", "开始合成语音")
 
             # 分片渲染模式：仅执行 TTS，生成渲染清单，上传音频/图片到 R2
             # 渲染和拼接由独立的 workflow job（render_shard / assemble_mode）执行
-            # 完整合成模式（--full-compose 或未设置 render_shards）：执行 TTS + 渲染 + 拼接
+            # 完整合成模式：TTS 在 compose_video 中执行（见 VIDEO_COMPOSE 阶段）
             if args.render_shards and args.render_shards >= 2:
                 # ── 分片渲染模式 ──
-                print("\n[6/6] 合成语音（渲染分片模式）...")
+                print("\n[8/8] 合成语音（渲染分片模式）...")
                 manifest_path = prepare_render_artifacts(
                     scenes, config, render_params, work_dir,
                     progress_cb=_cb_progress,
@@ -2739,22 +2881,55 @@ def main():
                     task_id=args.task_id,
                 )
 
-                # 读取清单获取总片段数，发送 TTS 子阶段完成回调
+                # 读取清单获取总片段数，发送 TTS 完成回调
                 with open(manifest_path, "r", encoding="utf-8") as f:
                     manifest = json.load(f)
                 total_clips = manifest["total_clips"]
                 _cb_progress(
-                    "TTS_COMPOSE",
+                    "TTS_SYNTH",
                     f"语音合成完成，共 {total_clips} 个渲染片段，等待渲染",
                     total_clips, total_clips,
-                    sub_phase="TTS",
                 )
 
                 print(f"\n📋 渲染产物已就绪，分片渲染将由独立 workflow 执行")
                 print(f"📁 渲染清单: {manifest_path}")
             else:
-                # ── 完整合成模式（向后兼容）──
-                print("\n[6/6] 合成视频...")
+                # ── 完整合成模式：TTS 在 compose_video 中执行 ──
+                _cb_progress("TTS_SYNTH", "语音合成将在视频合成阶段执行")
+
+            _cb_phase_done("TTS_SYNTH")
+
+        else:
+            # 从 R2 加载渲染清单（从 VIDEO_COMPOSE 阶段开始时）
+            manifest_path = load_phase_artifact(
+                "render_manifest.json", work_dir, args.task_id, args.r2_prefix, r2_config
+            )
+            if manifest_path:
+                print(f"✅ 从产物加载渲染清单: {manifest_path}")
+
+        # ══════════════════════════════════════════════════════════════
+        # Phase 6: VIDEO_COMPOSE — 语音 → 最终视频
+        # ══════════════════════════════════════════════════════════════
+        final_output = None
+        if start_idx <= 6:
+            # 下载已有的缓存片段（从 R2），避免重复渲染
+            if r2_config and args.task_id and args.r2_prefix:
+                cached = download_clips_from_r2(
+                    work_dir, args.task_id, args.r2_prefix, r2_config
+                )
+                if cached > 0:
+                    print(f"  ♻️ 从 R2 下载 {cached} 个缓存片段，将复用")
+
+            if args.render_shards and args.render_shards >= 2:
+                # ── 分片渲染模式：渲染和拼接由独立 workflow 执行 ──
+                # pipeline job 不执行渲染/拼接，由 render_shard / assemble_mode jobs 处理
+                print(f"\n📋 VIDEO_COMPOSE 阶段由独立渲染/拼接 workflow 执行")
+                print(f"   渲染分片: 4 个并行 job（--render-shard 1-4）")
+                print(f"   拼接: 1 个 assembly job（--assemble-mode）")
+                # 不发送 _cb_phase_done，由 render/assembly jobs 发送各自的回调
+            else:
+                # ── 完整合成模式（向后兼容）：TTS + 渲染 + 拼接 ──
+                print("\n[8/8] 合成视频...")
                 final_output = compose_video(
                     scenes, decisions, match_results,
                     config, render_params, work_dir,
@@ -2775,22 +2950,22 @@ def main():
                         r2_config["endpoint"],
                     )
 
-                _cb_phase_done("TTS_COMPOSE")
+                _cb_phase_done("VIDEO_COMPOSE")
 
                 # 发送完成回调（含最终视频信息）
                 if final_output:
                     send_callback(
                         {
                             "task_id": args.task_id,
-                        "phase": "TTS_COMPOSE",
-                        "status": "completed",
-                        "message": "视频生成完成",
-                        "final_video_key": f"{args.r2_prefix}/final_output.mp4" if r2_config else "final_output.mp4",
-                        "final_video_url": f"{args.r2_prefix}/final_output.mp4" if r2_config else None,
-                    },
-                    args.callback_url,
-                    args.callback_secret,
-                )
+                            "phase": "VIDEO_COMPOSE",
+                            "status": "completed",
+                            "message": "视频生成完成",
+                            "final_video_key": f"{args.r2_prefix}/final_output.mp4" if r2_config else "final_output.mp4",
+                            "final_video_url": f"{args.r2_prefix}/final_output.mp4" if r2_config else None,
+                        },
+                        args.callback_url,
+                        args.callback_secret,
+                    )
 
         # 保留临时目录中的图片素材，供后续 --rerender-clips 重渲染使用
         # 如需清理可手动删除 temp 目录，或修改 work_dir
@@ -2801,7 +2976,7 @@ def main():
             print(f"✅ 视频生成完成！")
             print(f"📁 输出文件: {final_output}")
             print(f"{'=' * 60}")
-        elif end_idx < 3:
+        elif end_idx < 6:
             print(f"\n{'=' * 60}")
             print(f"✅ 阶段执行完成（{end_phase_name}）")
             print(f"📁 产物已保存到 R2/工作目录")
@@ -2817,7 +2992,7 @@ def main():
             send_callback(
                 {
                     "task_id": args.task_id,
-                    "phase": args.start_phase or "SCENE_GEN",
+                    "phase": args.start_phase or "ARTICLE_PARSE",
                     "status": "failed",
                     "error": str(e),
                 },

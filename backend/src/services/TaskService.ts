@@ -9,19 +9,22 @@ import { findBgmName } from '../constants/bgm';
 // locked into phase_details and reused for all future progress calculations.
 // These estimates are dynamically replaced by real data as the pipeline runs.
 const PHASE_STATIC_ESTIMATES: Record<TaskPhase, number> = {
-  SCENE_GEN: 120_000,        // ~2 min: article generation + scene splitting
-  ASSET_MATCH: 240_000,      // ~4 min: parallel image download + matching (4-way concurrent)
-  REMOTION_RENDER: 60_000,   // ~1 min: analysis + decision (fast)
-  TTS_COMPOSE: 2_100_000,    // ~35 min: TTS (~1min) + parallel render across 4 runners (~30min)
+  ARTICLE_PARSE: 60_000,       // ~1 min: article acquisition + chunking
+  SCENE_GEN: 120_000,          // ~2 min: LLM scene generation from chunks
+  IMAGE_DOWNLOAD: 240_000,     // ~4 min: parallel image download (4-way concurrent)
+  ASSET_MATCH: 180_000,        // ~3 min: CLIP matching + multimodal review
+  RENDER_DECISION: 60_000,     // ~1 min: Remotion suitability analysis + decisions (fast)
+  TTS_SYNTH: 120_000,          // ~2 min: parallel TTS speech synthesis
+  VIDEO_COMPOSE: 2_100_000,    // ~35 min: parallel render across 4 runners + assembly
 };
 
-// Sub-phase static estimates for TTS_COMPOSE (ms). TTS_COMPOSE has two
-// sub-steps: speech synthesis (fast) and video rendering (slow, parallelized
-// across 4 Ubuntu runners). Tracking them separately prevents the fast TTS
-// step from being overweighted.
-const TTS_SUB_PHASE_STATIC_ESTIMATES = {
-  TTS: 120_000,     // ~2 min: speech synthesis
-  RENDER: 2_100_000,  // ~35 min: parallel video rendering across 4 runners
+// Sub-phase static estimates for VIDEO_COMPOSE (ms). VIDEO_COMPOSE has two
+// sub-steps: clip rendering (parallel across 4 Ubuntu runners, slow) and
+// final assembly (merge clips, fast). Tracking them separately prevents the
+// fast assembly step from being overweighted.
+const VIDEO_COMPOSE_SUB_PHASE_STATIC_ESTIMATES = {
+  RENDER: 1_980_000,  // ~33 min: parallel video rendering across 4 runners
+  ASSEMBLY: 120_000,  // ~2 min: merging clips + final composition
 };
 
 export class TaskService {
@@ -71,7 +74,7 @@ export class TaskService {
       bgm_key: data.bgmKey || null,
       bgm_name: bgmName,
       status: 'PENDING',
-      current_phase: 'SCENE_GEN',
+      current_phase: 'ARTICLE_PARSE',
       scenes_key: null,
       match_results_key: null,
       final_video_key: null,
@@ -251,9 +254,9 @@ export class TaskService {
       UPDATE tasks SET status = ?, retry_count = retry_count + 1, updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?
     `).bind('PENDING', id).run();
 
-    // Retry from the current phase, running through to TTS_COMPOSE
-    const currentPhase = (task.current_phase as TaskPhase) || 'SCENE_GEN';
-    await this.triggerPhase(id, currentPhase, currentPhase, 'TTS_COMPOSE');
+    // Retry from the current phase, running through to VIDEO_COMPOSE
+    const currentPhase = (task.current_phase as TaskPhase) || 'ARTICLE_PARSE';
+    await this.triggerPhase(id, currentPhase, currentPhase, 'VIDEO_COMPOSE');
     return this.getTask(id);
   }
 
@@ -265,8 +268,8 @@ export class TaskService {
     if (!task) return null;
     if (task.status !== 'PENDING') return null;
 
-    // Dispatch the full pipeline: SCENE_GEN → TTS_COMPOSE
-    await this.triggerPhase(id, 'SCENE_GEN', 'SCENE_GEN', 'TTS_COMPOSE');
+    // Dispatch the full pipeline: ARTICLE_PARSE → VIDEO_COMPOSE
+    await this.triggerPhase(id, 'ARTICLE_PARSE', 'ARTICLE_PARSE', 'VIDEO_COMPOSE');
     return this.getTask(id);
   }
 
@@ -404,10 +407,13 @@ export class TaskService {
 
     const prefix = `tasks/${taskId}/`;
     const requiredArtifacts: Record<TaskPhase, string[]> = {
-      SCENE_GEN: [],
+      ARTICLE_PARSE: [],
+      SCENE_GEN: ['article.txt'],
+      IMAGE_DOWNLOAD: ['scenes.json'],
       ASSET_MATCH: ['scenes.json'],
-      REMOTION_RENDER: ['scenes.json', 'match_results.json'],
-      TTS_COMPOSE: ['scenes.json', 'match_results.json', 'decisions.json'],
+      RENDER_DECISION: ['scenes.json', 'match_results.json'],
+      TTS_SYNTH: ['scenes.json', 'match_results.json', 'decisions.json'],
+      VIDEO_COMPOSE: ['scenes.json', 'match_results.json', 'decisions.json', 'render_manifest.json'],
     };
 
     const required = requiredArtifacts[phase] || [];
@@ -479,8 +485,8 @@ export class TaskService {
         language: task.language,
         enable_subtitle: task.enable_subtitle,
         bgm_key: task.bgm_key || '',
-        start_phase: 'TTS_COMPOSE',
-        end_phase: 'TTS_COMPOSE',
+        start_phase: 'VIDEO_COMPOSE',
+        end_phase: 'VIDEO_COMPOSE',
         rerender_clips: rerenderClipsSpec,
         rerender_image: rerenderImages,
         rerender_type: rerenderTypes,
@@ -513,9 +519,9 @@ export class TaskService {
 
     await this.env.DB.prepare(`
       UPDATE tasks SET status = ?, current_phase = ?, updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?
-    `).bind(phaseStatusMap.TTS_COMPOSE.running, 'TTS_COMPOSE', taskId).run();
+    `).bind(phaseStatusMap.VIDEO_COMPOSE.running, 'VIDEO_COMPOSE', taskId).run();
 
-    await this.logTask(taskId, 'TTS_COMPOSE', 'INFO', `Re-render triggered for scenes: ${rerenderClipsSpec}`);
+    await this.logTask(taskId, 'VIDEO_COMPOSE', 'INFO', `Re-render triggered for scenes: ${rerenderClipsSpec}`);
 
     return this.getTask(taskId);
   }
@@ -591,58 +597,20 @@ export class TaskService {
     currentDetail.failed = failedCount || 0;
     currentDetail.updated_at = nowISO;
 
-    // ── TTS_COMPOSE sub-phase tracking ───────────────────────────────────────
-    // TTS_COMPOSE has two sub-steps: TTS (speech synthesis, fast) and RENDER
-    // (video rendering, slow). Each sub-phase gets its own timing so the
-    // progress prediction reflects the real time distribution.
-    if (phase === 'TTS_COMPOSE' && subPhase) {
+    // ── VIDEO_COMPOSE sub-phase tracking ─────────────────────────────────────
+    // VIDEO_COMPOSE has two sub-steps: RENDER (parallel clip rendering across
+    // 4 runners, slow) and ASSEMBLY (merging clips + final composition, fast).
+    // Each sub-phase gets its own timing so the progress prediction reflects
+    // the real time distribution.
+    if (phase === 'VIDEO_COMPOSE' && subPhase) {
       currentDetail.sub_phase = subPhase;
 
-      if (subPhase === 'TTS') {
-        if (!currentDetail.tts?.started_at) {
-          // Estimate TTS start time for tasks started before deployment
-          const ttsTotal = totalCount || 0;
-          const ttsProcessed = processedCount || 0;
-          const ttsEstimate = TTS_SUB_PHASE_STATIC_ESTIMATES.TTS;
-          let estimatedElapsed: number;
-          if (ttsTotal > 0 && ttsProcessed > 0) {
-            estimatedElapsed = ttsEstimate * (ttsProcessed / ttsTotal);
-          } else {
-            estimatedElapsed = ttsEstimate;
-          }
-          currentDetail.tts = {
-            processed: 0,
-            total: 0,
-            started_at: new Date(now.getTime() - estimatedElapsed).toISOString(),
-            completed_at: null,
-            duration_ms: null,
-          };
-        }
-        currentDetail.tts.processed = Math.max(currentDetail.tts.processed || 0, processedCount || 0);
-        currentDetail.tts.total = Math.max(currentDetail.tts.total || 0, totalCount || 0);
-      } else if (subPhase === 'RENDER') {
-        // Lock in TTS sub-phase duration before RENDER starts
-        if (currentDetail.tts?.started_at && !currentDetail.tts?.duration_ms) {
-          const ttsElapsed = now.getTime() - new Date(currentDetail.tts.started_at).getTime();
-          currentDetail.tts.duration_ms = Math.max(0, ttsElapsed);
-          currentDetail.tts.completed_at = nowISO;
-        }
-        // For tasks started before deployment, TTS sub-phase may have no
-        // tracking data. Estimate its duration from the static estimate.
-        if (!currentDetail.tts?.started_at) {
-          currentDetail.tts = {
-            processed: 0,
-            total: 0,
-            started_at: new Date(now.getTime() - TTS_SUB_PHASE_STATIC_ESTIMATES.TTS).toISOString(),
-            completed_at: nowISO,
-            duration_ms: TTS_SUB_PHASE_STATIC_ESTIMATES.TTS,
-          };
-        }
+      if (subPhase === 'RENDER') {
         if (!currentDetail.render?.started_at) {
           // Estimate RENDER start time for tasks started before deployment
           const renderTotal = totalCount || 0;
           const renderProcessed = processedCount || 0;
-          const renderEstimate = TTS_SUB_PHASE_STATIC_ESTIMATES.RENDER;
+          const renderEstimate = VIDEO_COMPOSE_SUB_PHASE_STATIC_ESTIMATES.RENDER;
           let estimatedElapsed: number;
           if (renderTotal > 0 && renderProcessed > 0) {
             estimatedElapsed = renderEstimate * (renderProcessed / renderTotal);
@@ -660,6 +628,36 @@ export class TaskService {
         }
         currentDetail.render.processed = Math.max(currentDetail.render.processed || 0, processedCount || 0);
         currentDetail.render.total = Math.max(currentDetail.render.total || 0, totalCount || 0);
+      } else if (subPhase === 'ASSEMBLY') {
+        // Lock in RENDER sub-phase duration before ASSEMBLY starts
+        if (currentDetail.render?.started_at && !currentDetail.render?.duration_ms) {
+          const renderElapsed = now.getTime() - new Date(currentDetail.render.started_at).getTime();
+          currentDetail.render.duration_ms = Math.max(0, renderElapsed);
+          currentDetail.render.completed_at = nowISO;
+        }
+        // For tasks started before deployment, RENDER sub-phase may have no
+        // tracking data. Estimate its duration from the static estimate.
+        if (!currentDetail.render?.started_at) {
+          currentDetail.render = {
+            processed: 0,
+            total: 0,
+            started_at: new Date(now.getTime() - VIDEO_COMPOSE_SUB_PHASE_STATIC_ESTIMATES.RENDER).toISOString(),
+            completed_at: nowISO,
+            duration_ms: VIDEO_COMPOSE_SUB_PHASE_STATIC_ESTIMATES.RENDER,
+          };
+        }
+        if (!currentDetail.assembly?.started_at) {
+          currentDetail.assembly = {
+            processed: 0,
+            total: 0,
+            started_at: nowISO,
+            completed_at: null,
+            duration_ms: null,
+          };
+          currentDetail.sub_phase_started_at = currentDetail.assembly.started_at;
+        }
+        currentDetail.assembly.processed = Math.max(currentDetail.assembly.processed || 0, processedCount || 0);
+        currentDetail.assembly.total = Math.max(currentDetail.assembly.total || 0, totalCount || 0);
       }
     }
 
@@ -708,8 +706,8 @@ export class TaskService {
    * - Unreached phases use static estimates, which are replaced by real data
    *   as the pipeline advances.
    *
-   * For TTS_COMPOSE, sub-phases (TTS vs RENDER) are tracked separately so the
-   * fast TTS step doesn't get overweighted relative to slow rendering.
+   * For VIDEO_COMPOSE, sub-phases (RENDER vs ASSEMBLY) are tracked separately so the
+   * slow parallel rendering step is distinguished from the fast assembly step.
    */
   private calculateTimeProgress(
     phaseDetails: Record<string, any>,
@@ -733,45 +731,45 @@ export class TaskService {
       if (phase === currentPhase && detail?.started_at) {
         const elapsed = Math.max(0, now.getTime() - new Date(detail.started_at).getTime());
 
-        // TTS_COMPOSE with sub-phase tracking
-        if (phase === 'TTS_COMPOSE' && detail.sub_phase) {
-          if (detail.sub_phase === 'TTS') {
-            // TTS sub-phase running — predict TTS, estimate RENDER statically
-            const ttsProcessed = detail.tts?.processed ?? detail.processed ?? 0;
-            const ttsTotal = detail.tts?.total ?? detail.total ?? 0;
-            const ttsPredicted = ttsTotal > 0 && ttsProcessed > 0
-              ? elapsed * (ttsTotal / ttsProcessed)
-              : TTS_SUB_PHASE_STATIC_ESTIMATES.TTS;
-
-            totalPredictedMs += ttsPredicted + TTS_SUB_PHASE_STATIC_ESTIMATES.RENDER;
-            totalElapsedMs += elapsed;
-            continue;
-          } else if (detail.sub_phase === 'RENDER') {
-            // RENDER sub-phase running — TTS is done (locked), predict RENDER
-            const ttsDuration = detail.tts?.duration_ms
-              ?? (detail.tts?.started_at
-                ? Math.max(0, now.getTime() - new Date(detail.tts.started_at).getTime())
-                : TTS_SUB_PHASE_STATIC_ESTIMATES.TTS);
-
-            const renderStartedAt = detail.sub_phase_started_at || detail.started_at;
-            const renderElapsed = renderStartedAt
-              ? Math.max(0, now.getTime() - new Date(renderStartedAt).getTime())
-              : 0;
-
+        // VIDEO_COMPOSE with sub-phase tracking
+        if (phase === 'VIDEO_COMPOSE' && detail.sub_phase) {
+          if (detail.sub_phase === 'RENDER') {
+            // RENDER sub-phase running — predict RENDER, estimate ASSEMBLY statically
             const renderProcessed = detail.render?.processed ?? detail.processed ?? 0;
             const renderTotal = detail.render?.total ?? detail.total ?? 0;
             const renderPredicted = renderTotal > 0 && renderProcessed > 0
-              ? renderElapsed * (renderTotal / renderProcessed)
-              : TTS_SUB_PHASE_STATIC_ESTIMATES.RENDER;
+              ? elapsed * (renderTotal / renderProcessed)
+              : VIDEO_COMPOSE_SUB_PHASE_STATIC_ESTIMATES.RENDER;
 
-            totalPredictedMs += ttsDuration + renderPredicted;
-            totalElapsedMs += ttsDuration + renderElapsed;
+            totalPredictedMs += renderPredicted + VIDEO_COMPOSE_SUB_PHASE_STATIC_ESTIMATES.ASSEMBLY;
+            totalElapsedMs += elapsed;
+            continue;
+          } else if (detail.sub_phase === 'ASSEMBLY') {
+            // ASSEMBLY sub-phase running — RENDER is done (locked), predict ASSEMBLY
+            const renderDuration = detail.render?.duration_ms
+              ?? (detail.render?.started_at
+                ? Math.max(0, now.getTime() - new Date(detail.render.started_at).getTime())
+                : VIDEO_COMPOSE_SUB_PHASE_STATIC_ESTIMATES.RENDER);
+
+            const assemblyStartedAt = detail.sub_phase_started_at || detail.started_at;
+            const assemblyElapsed = assemblyStartedAt
+              ? Math.max(0, now.getTime() - new Date(assemblyStartedAt).getTime())
+              : 0;
+
+            const assemblyProcessed = detail.assembly?.processed ?? detail.processed ?? 0;
+            const assemblyTotal = detail.assembly?.total ?? detail.total ?? 0;
+            const assemblyPredicted = assemblyTotal > 0 && assemblyProcessed > 0
+              ? assemblyElapsed * (assemblyTotal / assemblyProcessed)
+              : VIDEO_COMPOSE_SUB_PHASE_STATIC_ESTIMATES.ASSEMBLY;
+
+            totalPredictedMs += renderDuration + assemblyPredicted;
+            totalElapsedMs += renderDuration + assemblyElapsed;
             continue;
           }
           // Unknown sub_phase — fall through to normal phase logic
         }
 
-        // Normal phase (or TTS_COMPOSE without sub-phase): adaptive prediction
+        // Normal phase (or VIDEO_COMPOSE without sub-phase): adaptive prediction
         const processed = detail.processed ?? 0;
         const total = detail.total ?? 0;
         if (total > 0 && processed > 0) {
@@ -809,7 +807,7 @@ export class TaskService {
     await this.env.DB.prepare(`
       UPDATE tasks SET status = ?, current_phase = ?, progress = 100, completed_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now'), updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now')
       WHERE id = ?
-    `).bind('COMPLETED', phase || 'TTS_COMPOSE', taskId).run();
+    `).bind('COMPLETED', phase || 'VIDEO_COMPOSE', taskId).run();
 
     // Store final video key if provided
     if (data?.final_video_key) {
@@ -861,7 +859,7 @@ export class TaskService {
     }
 
     // Final video metadata can arrive after the task already completed (main.py
-    // marks TTS_COMPOSE done, then sends the video URL), so store it first.
+    // marks VIDEO_COMPOSE done, then sends the video URL), so store it first.
     if (body.final_video_key) {
       await this.env.DB.prepare(`
         UPDATE tasks SET final_video_key = ?, final_video_url = ?, updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?
@@ -982,13 +980,13 @@ export class TaskService {
     const task = await this.getTask(taskId);
     if (!task) return;
 
-    const currentPhase = task.current_phase as TaskPhase || 'SCENE_GEN';
+    const currentPhase = task.current_phase as TaskPhase || 'ARTICLE_PARSE';
     const currentIndex = phaseOrder.indexOf(currentPhase);
     const nextPhase = phaseOrder[currentIndex + 1];
 
     if (!nextPhase) {
       // Last phase completed
-      if (currentPhase === 'TTS_COMPOSE') {
+      if (currentPhase === 'VIDEO_COMPOSE') {
         await this.env.DB.prepare(`
           UPDATE tasks SET status = ?, completed_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now'), updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?
         `).bind('COMPLETED', taskId).run();
