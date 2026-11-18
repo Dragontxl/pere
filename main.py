@@ -386,6 +386,40 @@ def send_callback(
         return False
 
 
+def _r2_client(r2_config: dict | None):
+    """创建 boto3 R2 (S3-compatible) 客户端
+
+    Args:
+        r2_config: R2 配置字典
+
+    Returns:
+        boto3 client 或 None
+    """
+    if not r2_config:
+        return None
+    try:
+        import boto3
+        from botocore.config import Config
+        return boto3.client(
+            "s3",
+            endpoint_url=r2_config["endpoint"].rstrip("/"),
+            aws_access_key_id=r2_config["access_key_id"],
+            aws_secret_access_key=r2_config["secret_access_key"],
+            config=Config(
+                signature_version="s3v4",
+                s3={"addressing_style": "path"},
+                retries={"max_attempts": 3, "mode": "standard"},
+                max_pool_connections=20,
+            ),
+        )
+    except ImportError:
+        print(f"  ⚠️ boto3 未安装，R2 操作将不可用")
+        return None
+    except Exception as e:
+        print(f"  ⚠️ R2 客户端创建失败: {e}")
+        return None
+
+
 def upload_to_r2(
     local_path: str,
     r2_key: str,
@@ -394,7 +428,7 @@ def upload_to_r2(
     r2_secret_access_key: str | None,
     r2_endpoint: str | None,
 ) -> bool:
-    """将本地文件上传到 R2（使用 wrangler CLI）
+    """将本地文件上传到 R2（使用 boto3 S3-compatible API，比 wrangler CLI 快 100 倍）
 
     Args:
         local_path: 本地文件路径
@@ -415,26 +449,21 @@ def upload_to_r2(
         print(f"  ⚠️ 文件不存在，跳过上传: {local_path}")
         return False
 
-    try:
-        # 使用 wrangler CLI 上传到 R2（wrangler 4 语法：对象路径用位置参数）
-        result = subprocess.run(
-            ["npx", "--yes", "wrangler", "r2", "object", "put",
-             f"{r2_bucket}/{r2_key}",
-             "--file", local_path,
-             "--remote"],
-            capture_output=True,
-            text=True,
-            timeout=300,
-        )
-        if result.returncode == 0:
-            print(f"  📤 R2 上传成功: {r2_key}")
-            return True
-        else:
-            print(f"  ⚠️ wrangler r2 put 失败: {result.stderr}")
-            return False
-    except FileNotFoundError:
-        print(f"  ⚠️ wrangler CLI 不可用，跳过 R2 上传: {local_path}")
+    client = _r2_client(
+        {
+            "bucket": r2_bucket,
+            "access_key_id": r2_access_key_id,
+            "secret_access_key": r2_secret_access_key,
+            "endpoint": r2_endpoint,
+        }
+    )
+    if not client:
         return False
+
+    try:
+        client.upload_file(local_path, r2_bucket, r2_key)
+        print(f"  📤 R2 上传成功: {r2_key}")
+        return True
     except Exception as e:
         print(f"  ⚠️ R2 上传失败 {r2_key}: {e}")
         return False
@@ -491,28 +520,14 @@ def load_phase_artifact(
     if task_id and r2_prefix and r2_config:
         try:
             r2_key = f"{r2_prefix}/{artifact_name}"
-            import urllib.request
-
-            endpoint = r2_config["endpoint"].rstrip("/")
-            bucket = r2_config["bucket"]
-            access_key = r2_config["access_key_id"]
-            secret_key = r2_config["secret_access_key"]
-
-            # 使用 wrangler CLI 下载（wrangler 4 语法：对象路径用位置参数）
-            result = subprocess.run(
-                ["npx", "--yes", "wrangler", "r2", "object", "get",
-                 f"{bucket}/{r2_key}",
-                 "--file", str(local_path),
-                 "--remote"],
-                capture_output=True,
-                text=True,
-                timeout=120,
-            )
-            if result.returncode == 0 and local_path.exists():
-                print(f"  📥 从 R2 下载产物: {r2_key}")
-                return local_path
+            client = _r2_client(r2_config)
+            if client:
+                client.download_file(r2_config["bucket"], r2_key, str(local_path))
+                if local_path.exists():
+                    print(f"  📥 从 R2 下载产物: {r2_key}")
+                    return local_path
             else:
-                print(f"  ⚠️ R2 下载失败: {r2_key} - {result.stderr}")
+                print(f"  ⚠️ R2 客户端不可用，无法下载: {r2_key}")
         except Exception as e:
             print(f"  ⚠️ R2 下载异常: {e}")
 
@@ -542,82 +557,30 @@ def download_clips_from_r2(
     if not task_id or not r2_prefix or not r2_config:
         return 0
 
+    client = _r2_client(r2_config)
+    if not client:
+        return 0
+
     try:
-        # 列出 R2 下所有 final_clip_*.mp4 文件
-        endpoint = r2_config["endpoint"].rstrip("/")
         bucket = r2_config["bucket"]
-        access_key = r2_config["access_key_id"]
-        secret_key = r2_config["secret_access_key"]
-
         downloaded = 0
-        cursor: str | None = None
 
-        while True:
-            options = {"prefix": f"{r2_prefix}/final_clip_", "limit": 1000}
-            if cursor:
-                options["cursor"] = cursor
-
-            import urllib.request
-            import json as _json
-
-            # 使用 AWS Signature V4 签名请求 R2（兼容 S3 API）
-            # 简化方案：使用 wrangler CLI 列出对象
-            list_cmd = [
-                "npx", "--yes", "wrangler", "r2", "object", "list",
-                f"{bucket}/{r2_prefix}/",
-                "--remote",
-            ]
-            result = subprocess.run(
-                list_cmd,
-                capture_output=True,
-                text=True,
-                timeout=120,
-            )
-
-            if result.returncode != 0:
-                print(f"  ⚠️ R2 列出对象失败: {result.stderr}")
-                return 0
-
-            # wrangler r2 object list 输出为 JSON
-            try:
-                objects = _json.loads(result.stdout)
-                if not isinstance(objects, list):
-                    return 0
-            except (json.JSONDecodeError, ValueError):
-                return 0
-
-            clip_files = [
-                obj for obj in objects
-                if isinstance(obj, dict) and obj.get("key", "").endswith(".mp4")
-                and "final_clip_" in obj.get("key", "")
-            ]
-
-            for obj in clip_files:
-                clip_key = obj["key"]
+        # 列出 R2 下所有 final_clip_*.mp4 文件
+        paginator = client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=bucket, Prefix=f"{r2_prefix}/final_clip_"):
+            for obj in page.get("Contents", []):
+                clip_key = obj["Key"]
+                if not clip_key.endswith(".mp4"):
+                    continue
                 local_path = work_dir / os.path.basename(clip_key)
-
                 if local_path.exists():
                     continue  # 已存在，跳过
-
-                download_cmd = [
-                    "npx", "--yes", "wrangler", "r2", "object", "get",
-                    f"{bucket}/{clip_key}",
-                    "--file", str(local_path),
-                    "--remote",
-                ]
-                dl_result = subprocess.run(
-                    download_cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=120,
-                )
-                if dl_result.returncode == 0 and local_path.exists():
+                try:
+                    client.download_file(bucket, clip_key, str(local_path))
                     downloaded += 1
                     print(f"  📥 下载缓存片段: {os.path.basename(clip_key)}")
-                else:
-                    print(f"  ⚠️ 下载缓存片段失败: {clip_key} - {dl_result.stderr}")
-
-            break  # wrangler list 不支持分页游标，一次性获取
+                except Exception as e:
+                    print(f"  ⚠️ 下载缓存片段失败: {clip_key} - {e}")
 
         return downloaded
     except Exception as e:
@@ -721,64 +684,35 @@ def download_images_from_r2(
     if not r2_prefix or not r2_config:
         return 0
 
+    client = _r2_client(r2_config)
+    if not client:
+        return 0
+
     try:
         bucket = r2_config["bucket"]
-        # 列出 R2 下所有图片对象
-        list_cmd = [
-            "npx", "--yes", "wrangler", "r2", "object", "list",
-            f"{bucket}/{r2_prefix}/images/",
-            "--remote",
-        ]
-        result = subprocess.run(
-            list_cmd,
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-        if result.returncode != 0:
-            print(f"  ⚠️ R2 列出图片失败: {result.stderr}")
-            return 0
-
-        import json as _json
-        try:
-            objects = _json.loads(result.stdout)
-            if not isinstance(objects, list):
-                return 0
-        except (json.JSONDecodeError, ValueError):
-            return 0
-
         downloaded = 0
-        for obj in objects:
-            if not isinstance(obj, dict):
-                continue
-            key = obj.get("key", "")
-            if not key:
-                continue
-            # key 格式: {r2_prefix}/images/scene_{id}/filename
-            parts = key.split("/images/")
-            if len(parts) < 2:
-                continue
-            rel_path = parts[1]
-            local_path = temp_dir / rel_path
-            local_path.parent.mkdir(parents=True, exist_ok=True)
 
-            if local_path.exists():
-                continue
+        # 列出 R2 下所有图片对象
+        paginator = client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=bucket, Prefix=f"{r2_prefix}/images/"):
+            for obj in page.get("Contents", []):
+                key = obj["Key"]
+                # key 格式: {r2_prefix}/images/scene_{id}/filename
+                parts = key.split("/images/")
+                if len(parts) < 2:
+                    continue
+                rel_path = parts[1]
+                local_path = temp_dir / rel_path
+                local_path.parent.mkdir(parents=True, exist_ok=True)
 
-            download_cmd = [
-                "npx", "--yes", "wrangler", "r2", "object", "get",
-                f"{bucket}/{key}",
-                "--file", str(local_path),
-                "--remote",
-            ]
-            dl_result = subprocess.run(
-                download_cmd,
-                capture_output=True,
-                text=True,
-                timeout=120,
-            )
-            if dl_result.returncode == 0 and local_path.exists():
-                downloaded += 1
+                if local_path.exists():
+                    continue
+
+                try:
+                    client.download_file(bucket, key, str(local_path))
+                    downloaded += 1
+                except Exception as e:
+                    print(f"  ⚠️ 下载图片失败: {key} - {e}")
 
         print(f"  📥 已从 R2 下载 {downloaded} 张图片")
         return downloaded
@@ -809,7 +743,7 @@ def get_article(client, config: dict, model: str) -> str:
         return select_and_get_article(client, model)
 
 
-def download_and_match(scenes: list, zhipu_client, config: dict, temp_dir: Path, work_dir: Path, agnes_client=None, model: str = "agnes-3.0-flash", progress_cb=None) -> dict:
+def download_and_match(scenes: list, zhipu_client, config: dict, temp_dir: Path, work_dir: Path, agnes_client=None, model: str = "agnes-3.0-flash", progress_cb=None, r2_prefix=None, r2_config=None) -> dict:
     """环节3：为每个镜头下载候选图片并做匹配分析
 
     Args:
@@ -917,6 +851,20 @@ def download_and_match(scenes: list, zhipu_client, config: dict, temp_dir: Path,
             else:
                 matches = [{"path": image_paths[0], "score": 0.0}]
                 print(f"    ⚠️ 使用第一张图片（无 CLIP 匹配）")
+
+            # 边下载边上传图片到 R2（供渲染 job 下载，boto3 上传是 I/O 操作不阻塞匹配）
+            if r2_prefix and r2_config:
+                for img in sorted(image_dir.iterdir()):
+                    if img.suffix.lower() not in (".jpg", ".jpeg", ".png", ".webp"):
+                        continue
+                    r2_img_key = f"{r2_prefix}/images/{image_dir.name}/{img.name}"
+                    upload_to_r2(
+                        str(img), r2_img_key,
+                        r2_config["bucket"],
+                        r2_config["access_key_id"],
+                        r2_config["secret_access_key"],
+                        r2_config["endpoint"],
+                    )
 
             return scene.scene_id, matches
         except Exception as e:
@@ -2052,6 +2000,20 @@ def prepare_render_artifacts(
                     print(f"  ⚠️ 镜头 {scene.scene_id} 语音合成失败，"
                           f"按 {scene.duration:.1f}s 渲染（无解说音轨）")
 
+                # 边合成边上传音频段到 R2（boto3 上传是 I/O 操作，不阻塞后续合成）
+                if r2_prefix and r2_config and segments:
+                    for seg_path, _, _ in segments:
+                        if os.path.exists(seg_path):
+                            seg_filename = os.path.basename(seg_path)
+                            r2_key = f"{r2_prefix}/audio/{seg_filename}"
+                            upload_to_r2(
+                                str(seg_path), r2_key,
+                                r2_config["bucket"],
+                                r2_config["access_key_id"],
+                                r2_config["secret_access_key"],
+                                r2_config["endpoint"],
+                            )
+
                 if progress_cb:
                     progress_cb("TTS_COMPOSE", f"镜头 {scene.scene_id} 语音合成完成", done, len(scenes), sub_phase="TTS")
 
@@ -2092,26 +2054,7 @@ def prepare_render_artifacts(
     with open(manifest_path, "w", encoding="utf-8") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
 
-    # 上传音频段到 R2
-    if r2_prefix and r2_config:
-        for clip in clips:
-            audio_file = clip.get("audio_file")
-            if audio_file:
-                audio_path = work_dir / audio_file
-                if os.path.exists(audio_path):
-                    r2_key = f"{r2_prefix}/audio/{audio_file}"
-                    upload_to_r2(
-                        str(audio_path), r2_key,
-                        r2_config["bucket"],
-                        r2_config["access_key_id"],
-                        r2_config["secret_access_key"],
-                        r2_config["endpoint"],
-                    )
-
-    # 上传图片到 R2
-    if r2_prefix and r2_config:
-        temp_dir = work_dir / "temp"
-        upload_images_to_r2(temp_dir, r2_prefix, r2_config)
+    # 音频段和图片已在生成过程中边生成边上传到 R2（见 _tts_one 回调和 _process_scene）
 
     # 上传渲染清单到 R2
     save_phase_artifact(str(manifest_path), task_id, r2_prefix, r2_config)
@@ -2192,22 +2135,21 @@ def render_shard(
     _patch_image_paths(match_results, list(decisions.values()), work_dir)
 
     # 下载音频段
+    client = _r2_client(r2_config) if r2_config else None
     for clip in shard_clips:
         audio_file = clip.get("audio_file")
         if audio_file:
             local_audio = work_dir / audio_file
-            if not local_audio.exists() and r2_prefix and r2_config:
-                download_cmd = [
-                    "npx", "--yes", "wrangler", "r2", "object", "get",
-                    f"{r2_config['bucket']}/{r2_prefix}/audio/{audio_file}",
-                    "--file", str(local_audio),
-                    "--remote",
-                ]
-                result = subprocess.run(download_cmd, capture_output=True, text=True, timeout=120)
-                if result.returncode == 0 and local_audio.exists():
-                    print(f"  📥 下载音频段: {audio_file}")
-                else:
-                    print(f"  ⚠️ 下载音频段失败: {audio_file}")
+            if not local_audio.exists() and client and r2_prefix:
+                try:
+                    r2_audio_key = f"{r2_prefix}/audio/{audio_file}"
+                    client.download_file(r2_config["bucket"], r2_audio_key, str(local_audio))
+                    if local_audio.exists():
+                        print(f"  📥 下载音频段: {audio_file}")
+                    else:
+                        print(f"  ⚠️ 下载音频段失败: {audio_file}")
+                except Exception as e:
+                    print(f"  ⚠️ 下载音频段失败: {audio_file} - {e}")
 
     # 渲染配置
     resolution = (render_params["resolution_width"], render_params["resolution_height"])
@@ -2687,7 +2629,9 @@ def main():
             print("\n[3/6] 下载并匹配图片素材...")
             match_results = download_and_match(
                 scenes, zhipu_client, config, temp_dir, work_dir,
-                progress_cb=_cb_progress
+                progress_cb=_cb_progress,
+                r2_prefix=args.r2_prefix,
+                r2_config=r2_config,
             )
 
             # 保存匹配结果
