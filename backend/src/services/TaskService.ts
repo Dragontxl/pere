@@ -543,15 +543,18 @@ export class TaskService {
       const phaseProgress = Math.round((processedCount / totalCount) * 100);
       const progress = Math.round((phaseIndex / phasesCount) * 100 + (phaseProgress / 100) * (100 / phasesCount));
 
+      // These counters represent the current phase's latest values, NOT cumulative
+      // across callbacks. Each callback reports the current processed/total/failed
+      // for the phase; per-phase history is preserved in phase_details JSON.
       await this.env.DB.prepare(`
         UPDATE tasks SET
           progress = MAX(progress, ?),
           current_phase = ?,
           status = ?,
           status_message = ?,
-          processed_frames = COALESCE(processed_frames, 0) + ?,
-          total_frames = COALESCE(total_frames, 0) + ?,
-          failed_frames = COALESCE(failed_frames, 0) + ?,
+          processed_frames = ?,
+          total_frames = ?,
+          failed_frames = ?,
           phase_details = ?,
           updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now')
         WHERE id = ? AND ${terminalStatusClause}

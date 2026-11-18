@@ -2,7 +2,12 @@ import { Hono } from 'hono';
 import { CryptoService } from '../../services/CryptoService';
 import { Bindings } from '../../types/env';
 
-const adminRoutes = new Hono();
+type AdminVariables = {
+  userId: string;
+  role: string;
+};
+
+const adminRoutes = new Hono<{ Variables: AdminVariables }>();
 
 // Admin auth middleware
 adminRoutes.use('*', async (c, next) => {
