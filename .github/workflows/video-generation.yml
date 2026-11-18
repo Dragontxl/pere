@@ -546,7 +546,7 @@ jobs:
   # 所有渲染分片完成后执行
   # ══════════════════════════════════════════════════════════════
   assembly:
-    needs: render
+    needs: [render, pipeline]
     # 重渲染模式不需要拼接 job（main.py 的 rerender 模式已处理拼接）
     if: ${{ needs.pipeline.outputs.rerender_clips == '' }}
     runs-on: ubuntu-latest
