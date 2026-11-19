@@ -5,6 +5,7 @@
 """
 
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -13,8 +14,13 @@ from .moviepy_compat import VideoFileClip, AudioFileClip, set_audio, subclip
 # 系统 ffmpeg 和 ffprobe 路径
 FFMPEG_EXE = os.environ.get("IMAGEIO_FFMPEG_EXE", "ffmpeg")
 
-def _resolve_ffprobe() -> str:
-    """解析 ffprobe 可执行文件路径，兼容 Windows(.exe) 和 Linux(无后缀)"""
+def _resolve_ffprobe() -> str | None:
+    """解析 ffprobe 可执行文件路径，兼容 Windows(.exe) 和 Linux(无后缀)
+
+    注意：imageio-ffmpeg 只提供 ffmpeg，不提供 ffprobe。GitHub Actions 的
+    ubuntu-latest 镜像默认也没有安装 ffmpeg，所以这里可能返回 None。
+    返回 None 时调用方必须退回 ffmpeg 解析，不能直接判定片段损坏。
+    """
     # 优先用 shutil.which 在系统 PATH 中查找
     probed = shutil.which("ffprobe")
     if probed:
@@ -24,11 +30,10 @@ def _resolve_ffprobe() -> str:
     ffmpeg_dir = os.path.dirname(FFMPEG_EXE)
     for suffix in ("ffprobe.exe", "ffprobe"):
         candidate = os.path.join(ffmpeg_dir, suffix)
-        if os.path.exists(candidate):
+        if os.path.isfile(candidate):
             return candidate
 
-    # 兜底：返回 "ffprobe"，让 subprocess 在 PATH 中查找
-    return "ffprobe"
+    return None
 
 FFPROBE_EXE = _resolve_ffprobe()
 
@@ -57,6 +62,10 @@ def merge_clips_stream_copy(clip_paths: list, output_path: str) -> str:
         raise RuntimeError("没有视频片段可拼接")
 
     # 预检查：所有片段的 pix_fmt 必须一致，否则流拷贝会产生静默颜色失真
+    if not FFPROBE_EXE:
+        # 没有 ffprobe 就无法做一致性预检查，直接回退重编码（FFMPEG_EXE 一定可用）
+        raise RuntimeError("未找到 ffprobe，跳过流拷贝，改用重编码拼接")
+
     pix_fmts = set()
     for path in clip_paths:
         try:
@@ -120,14 +129,47 @@ def merge_clips_stream_copy(clip_paths: list, output_path: str) -> str:
     return output_path
 
 
+def _probe_with_ffmpeg(path: str) -> dict | None:
+    """没有 ffprobe 时的兜底探测：用 ffmpeg -i 解析时长并确认存在视频流
+
+    imageio-ffmpeg 只提供 ffmpeg，不提供 ffprobe，CI 上若未安装 ffmpeg
+    就会落到这里。ffmpeg -i 在不输出文件时返回码为 1，因此不看 returncode。
+    """
+    try:
+        result = subprocess.run(
+            [FFMPEG_EXE, "-hide_banner", "-i", path],
+            capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=30
+        )
+    except Exception:
+        return None
+
+    stderr = result.stderr or ""
+    if "Video:" not in stderr:
+        return None
+
+    m = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", stderr)
+    if not m:
+        return None
+    duration = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
+    if duration <= 0.1:
+        return None
+
+    return {"nb_frames": -1, "duration": duration, "pix_fmt": ""}
+
+
 def _probe_clip_info(path: str) -> dict | None:
-    """用 ffprobe 获取片段信息，损坏返回 None
+    """获取片段信息，损坏返回 None（ffprobe 缺失时自动退回 ffmpeg）
 
     Returns:
         dict 含 nb_frames, duration, pix_fmt 等；损坏时返回 None
     """
     if not os.path.exists(path) or os.path.getsize(path) < 204_800:
         return None
+
+    if not FFPROBE_EXE:
+        # 没有 ffprobe：必须走 ffmpeg 兜底，否则会把所有片段误判为损坏
+        return _probe_with_ffmpeg(path)
 
     try:
         result = subprocess.run(
@@ -154,6 +196,9 @@ def _probe_clip_info(path: str) -> dict | None:
             "duration": duration,
             "pix_fmt": stream.get("pix_fmt", ""),
         }
+    except FileNotFoundError:
+        # ffprobe 路径不可执行（例如被删除）：退回 ffmpeg 探测
+        return _probe_with_ffmpeg(path)
     except Exception:
         return None
 
@@ -178,6 +223,11 @@ def merge_clips(clip_paths: list, output_path: str, preset: str = "veryfast") ->
     Raises:
         RuntimeError: 所有片段均加载失败或拼接失败时抛出
     """
+    if FFPROBE_EXE:
+        print(f"  🔍 片段探测: {FFPROBE_EXE}")
+    else:
+        print("  ⚠️ 未找到 ffprobe，改用 ffmpeg 解析片段信息（CI 上建议安装 ffmpeg 以启用流拷贝拼接）")
+
     # 预检所有片段，过滤损坏的
     valid_clips = []
     skipped = []

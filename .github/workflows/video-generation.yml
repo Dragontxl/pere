@@ -136,7 +136,7 @@ jobs:
       - name: 安装系统依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends imagemagick fonts-noto-cjk
+          sudo apt-get install -y --no-install-recommends imagemagick fonts-noto-cjk ffmpeg
 
       - name: 安装 Python 依赖
         run: |
@@ -459,7 +459,7 @@ jobs:
       - name: 安装系统依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends imagemagick fonts-noto-cjk
+          sudo apt-get install -y --no-install-recommends imagemagick fonts-noto-cjk ffmpeg
 
       - name: 安装 Python 依赖
         run: |
@@ -476,6 +476,7 @@ jobs:
             echo "IMAGEIO_FFMPEG_EXE=$ffmpegPath" >> $GITHUB_ENV
             echo "ffmpeg: $ffmpegPath"
           fi
+          echo "ffprobe: $(command -v ffprobe || echo 'MISSING (片段校验将退回 ffmpeg)')"
 
       - name: 渲染分片 ${{ matrix.shard }}
         env:
@@ -576,7 +577,7 @@ jobs:
       - name: 安装系统依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends imagemagick fonts-noto-cjk
+          sudo apt-get install -y --no-install-recommends imagemagick fonts-noto-cjk ffmpeg
 
       - name: 安装 Python 依赖
         run: |
@@ -589,6 +590,7 @@ jobs:
             echo "IMAGEIO_FFMPEG_EXE=$ffmpegPath" >> $GITHUB_ENV
             echo "ffmpeg: $ffmpegPath"
           fi
+          echo "ffprobe: $(command -v ffprobe || echo 'MISSING (片段校验将退回 ffmpeg)')"
 
       - name: 拼接最终视频
         env:
