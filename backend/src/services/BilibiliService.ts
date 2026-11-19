@@ -181,8 +181,10 @@ export class BilibiliService {
       },
     };
 
+    // 与 upload-bilibili.yml 的 `repository_dispatch: types: [bilibili-upload]` 保持一致，
+    // 与 TaskService 使用同一个 repository_dispatch 端点（fine-grained 权限：Contents: write）
     const resp = await fetch(
-      `https://api.github.com/repos/${owner}/${repo}/actions/workflows/upload-bilibili.yml/dispatches`,
+      `https://api.github.com/repos/${owner}/${repo}/dispatches`,
       {
         method: 'POST',
         headers: {
