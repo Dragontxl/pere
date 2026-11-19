@@ -132,10 +132,9 @@ def merge_clips_stream_copy(clip_paths: list, output_path: str) -> str:
             raise RuntimeError(f"流拷贝预检查失败: {path}")
         params_list.append(p)
 
-    # 目标像素格式：取出现次数最多的 pix_fmt，无则默认 yuv420p
-    from collections import Counter
-    pix_counter = Counter(p["pix_fmt"] for p in params_list if p["pix_fmt"])
-    target_pix = pix_counter.most_common(1)[0][0] if pix_counter else "yuv420p"
+    # 目标像素格式固定为 yuv420p（有限范围），与 Remotion 渲染、各写片段路径一致，
+    # 保证所有片段最终收敛到唯一规范格式，流拷贝拼接始终可用。
+    target_pix = "yuv420p"
 
     # 分辨率必须一致（pix_fmt 可归一化，但分辨率不一致无法简单归一化）
     dims = {(p["width"], p["height"]) for p in params_list}
