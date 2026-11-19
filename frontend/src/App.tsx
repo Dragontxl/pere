@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard';
 import CreateTask from './pages/CreateTask';
 import TaskDetail from './pages/TaskDetail';
 import FileBrowser from './pages/FileBrowser';
+import Settings from './pages/Settings';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -31,6 +32,7 @@ export default function App() {
         <Route path="create" element={<CreateTask />} />
         <Route path="tasks/:id" element={<TaskDetail />} />
         <Route path="files" element={<FileBrowser />} />
+        <Route path="settings" element={<Settings />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

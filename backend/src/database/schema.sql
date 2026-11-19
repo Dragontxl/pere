@@ -40,6 +40,10 @@ CREATE TABLE IF NOT EXISTS tasks (
     final_video_key TEXT,
     final_video_url TEXT,
     cover_image_key TEXT,
+    bilibili_upload BOOLEAN DEFAULT FALSE,
+    bilibili_status TEXT,
+    bilibili_bvid TEXT,
+    bilibili_url TEXT,
     progress INTEGER DEFAULT 0,
     retry_count INTEGER DEFAULT 0,
     max_retries INTEGER DEFAULT 3,
@@ -64,6 +68,22 @@ CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks(user_id);
 
 -- Migration: add cover_image_key column for video cover feature
 ALTER TABLE tasks ADD COLUMN cover_image_key TEXT;
+
+-- Migration: add bilibili upload columns for B站 upload feature
+ALTER TABLE tasks ADD COLUMN bilibili_upload BOOLEAN DEFAULT FALSE;
+ALTER TABLE tasks ADD COLUMN bilibili_status TEXT;
+ALTER TABLE tasks ADD COLUMN bilibili_bvid TEXT;
+ALTER TABLE tasks ADD COLUMN bilibili_url TEXT;
+
+-- Bilibili credentials table: stores each user's B站 cookies (encrypted)
+CREATE TABLE IF NOT EXISTS bilibili_credentials (
+    user_id TEXT PRIMARY KEY,
+    cookies_encrypted TEXT NOT NULL,
+    has_sessdata BOOLEAN DEFAULT FALSE,
+    has_bili_jct BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
 -- Operation logs table (reused)
 CREATE TABLE IF NOT EXISTS operation_logs (

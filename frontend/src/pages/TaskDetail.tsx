@@ -26,6 +26,9 @@ export default function TaskDetail() {
   const [rerenderTypes, setRerenderTypes] = useState('');
   const [rerendering, setRerendering] = useState(false);
 
+  // Bilibili upload state
+  const [bilibiliUploading, setBilibiliUploading] = useState(false);
+
   const fetchTask = useCallback(async () => {
     if (!id) return;
     try {
@@ -101,6 +104,20 @@ export default function TaskDetail() {
       navigate('/');
     } catch (err) {
       alert(err instanceof Error ? err.message : '删除失败');
+    }
+  };
+
+  const handleUploadBilibili = async () => {
+    if (!task) return;
+    setBilibiliUploading(true);
+    try {
+      await taskApi.uploadBilibili(task.id);
+      alert('B站上传已触发，请稍后刷新查看结果');
+      fetchTask();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '上传B站失败');
+    } finally {
+      setBilibiliUploading(false);
     }
   };
 
@@ -459,6 +476,17 @@ export default function TaskDetail() {
                 <a href={videoUrl} download className="btn btn-primary">
                   ⬇ 下载视频
                 </a>
+                <button
+                  className="btn btn-secondary"
+                  onClick={handleUploadBilibili}
+                  disabled={
+                    bilibiliUploading ||
+                    task.bilibili_status === 'pending' ||
+                    task.bilibili_status === 'uploading'
+                  }
+                >
+                  {bilibiliUploading ? '触发中...' : '📺 上传B站'}
+                </button>
                 {task.final_video_key && (
                   <span className="video-key">R2 Key: {task.final_video_key}</span>
                 )}
@@ -505,6 +533,28 @@ export default function TaskDetail() {
               <div className="info-item">
                 <span className="info-label">背景音乐</span>
                 <span className="info-value">{task.bgm_name || '未添加'}</span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">B站上传</span>
+                <span className="info-value">
+                  {task.bilibili_status === 'success' ? (
+                    task.bilibili_url ? (
+                      <a href={task.bilibili_url} target="_blank" rel="noreferrer" className="link">
+                        {task.bilibili_bvid || task.bilibili_url}
+                      </a>
+                    ) : (
+                      task.bilibili_bvid || '已上传'
+                    )
+                  ) : task.bilibili_status === 'pending' || task.bilibili_status === 'uploading' ? (
+                    '上传中...'
+                  ) : task.bilibili_status === 'failed' ? (
+                    '上传失败'
+                  ) : task.bilibili_upload ? (
+                    '已选择自动上传'
+                  ) : (
+                    '未上传'
+                  )}
+                </span>
               </div>
               <div className="info-item">
                 <span className="info-label">进度</span>

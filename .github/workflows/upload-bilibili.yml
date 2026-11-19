@@ -1,0 +1,197 @@
+name: B站上传
+
+on:
+  repository_dispatch:
+    types: [bilibili-upload]
+  workflow_dispatch:
+    inputs:
+      task_id:
+        description: '任务ID'
+        required: true
+        type: string
+      video_key:
+        description: '视频 R2 Key'
+        required: true
+        type: string
+      cover_key:
+        description: '封面 R2 Key（可选）'
+        required: false
+        type: string
+      cookies_key:
+        description: 'Cookie R2 Key'
+        required: true
+        type: string
+      title:
+        description: '视频标题'
+        required: true
+        type: string
+      article_content:
+        description: '文章内容（用于提炼简介/标签）'
+        required: false
+        type: string
+      orientation:
+        description: '方向'
+        required: false
+        default: 'landscape'
+        type: choice
+        options:
+          - landscape
+          - portrait
+
+permissions:
+  contents: read
+
+env:
+  TASK_ID: ${{ github.event.client_payload.task_id || github.event.inputs.task_id || '' }}
+  VIDEO_KEY: ${{ github.event.client_payload.video_key || github.event.inputs.video_key || '' }}
+  COVER_KEY: ${{ github.event.client_payload.cover_key || github.event.inputs.cover_key || '' }}
+  COOKIES_KEY: ${{ github.event.client_payload.cookies_key || github.event.inputs.cookies_key || '' }}
+  TITLE: ${{ github.event.client_payload.title || github.event.inputs.title || '' }}
+  ARTICLE_CONTENT: ${{ github.event.client_payload.article_content || github.event.inputs.article_content || '' }}
+  ORIENTATION: ${{ github.event.client_payload.orientation || github.event.inputs.orientation || 'landscape' }}
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 缓存 pip 依赖
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+          restore-keys: pip-${{ runner.os }}-
+          retention-days: 14
+
+      - name: 安装系统依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg fonts-noto-cjk
+
+      - name: 安装 Python 依赖
+        run: |
+          pip install -r requirements.txt
+
+      - name: 安装 Playwright 浏览器
+        run: |
+          python -m playwright install chromium --with-deps
+
+      - name: 归一化参数
+        id: params
+        shell: bash
+        run: |
+          payload=""
+          if [ -n "$GITHUB_EVENT_PATH" ] && [ -f "$GITHUB_EVENT_PATH" ]; then
+            event=$(cat "$GITHUB_EVENT_PATH")
+            if echo "$event" | grep -q '"client_payload"'; then
+              payload=$(echo "$event" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps(d.get('client_payload',{})))")
+            fi
+          fi
+
+          if [ -n "$payload" ] && [ "$payload" != "{}" ]; then
+            task_id=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('task_id',''))")
+            video_key=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('video_key',''))")
+            cover_key=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('cover_key',''))")
+            cookies_key=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('cookies_key',''))")
+            title=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('title',''))")
+            article_content=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('article_content',''))")
+            orientation=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('orientation','landscape'))")
+          else
+            task_id="${{ inputs.task_id }}"
+            video_key="${{ inputs.video_key }}"
+            cover_key="${{ inputs.cover_key }}"
+            cookies_key="${{ inputs.cookies_key }}"
+            title="${{ inputs.title }}"
+            article_content="${{ inputs.article_content }}"
+            orientation="${{ inputs.orientation }}"
+          fi
+
+          # 缺省值兜底
+          [ -z "$orientation" ] && orientation="landscape"
+
+          echo "TASK_ID=$task_id" >> $GITHUB_ENV
+          echo "VIDEO_KEY=$video_key" >> $GITHUB_ENV
+          echo "COVER_KEY=$cover_key" >> $GITHUB_ENV
+          echo "COOKIES_KEY=$cookies_key" >> $GITHUB_ENV
+          echo "TITLE=$title" >> $GITHUB_ENV
+          echo "ARTICLE_CONTENT<<EOF_ARTICLE" >> $GITHUB_ENV
+          echo "$article_content" >> $GITHUB_ENV
+          echo "EOF_ARTICLE" >> $GITHUB_ENV
+          echo "ORIENTATION=$orientation" >> $GITHUB_ENV
+
+          echo "task_id=$task_id" >> $GITHUB_OUTPUT
+          echo "video_key=$video_key" >> $GITHUB_OUTPUT
+          echo "cover_key=$cover_key" >> $GITHUB_OUTPUT
+          echo "cookies_key=$cookies_key" >> $GITHUB_OUTPUT
+          echo "title=$title" >> $GITHUB_OUTPUT
+
+          echo "Task: $task_id"
+          echo "Video: $video_key"
+          echo "Cover: $cover_key"
+          echo "Cookies: $cookies_key"
+
+      - name: 执行 B站上传
+        env:
+          TASK_ID: ${{ env.TASK_ID }}
+          VIDEO_KEY: ${{ env.VIDEO_KEY }}
+          COVER_KEY: ${{ env.COVER_KEY }}
+          COOKIES_KEY: ${{ env.COOKIES_KEY }}
+          TITLE: ${{ env.TITLE }}
+          ARTICLE_CONTENT: ${{ env.ARTICLE_CONTENT }}
+          ORIENTATION: ${{ env.ORIENTATION }}
+          CALLBACK_URL: ${{ secrets.CALLBACK_URL }}
+          CALLBACK_SECRET: ${{ secrets.CALLBACK_SECRET }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
+          AGNES_API_KEY: ${{ secrets.AGNES_API_KEY }}
+          AGNES_BASE_URL: ${{ secrets.AGNES_BASE_URL || 'https://apihub.agnes-ai.com/v1' }}
+        shell: bash
+        run: |
+          cmd=(
+            "python" "-m" "core.uploaders.bilibili_uploader"
+            "--task-id" "$TASK_ID"
+            "--video-key" "$VIDEO_KEY"
+            "--cookies-key" "$COOKIES_KEY"
+            "--title" "$TITLE"
+            "--article-content" "$ARTICLE_CONTENT"
+            "--orientation" "$ORIENTATION"
+            "--callback-url" "$CALLBACK_URL"
+            "--callback-secret" "$CALLBACK_SECRET"
+            "--r2-bucket" "$R2_BUCKET_NAME"
+            "--r2-access-key-id" "$R2_ACCESS_KEY_ID"
+            "--r2-secret-access-key" "$R2_SECRET_ACCESS_KEY"
+            "--r2-endpoint" "$R2_ENDPOINT_URL"
+            "--agnes-api-key" "$AGNES_API_KEY"
+            "--agnes-base-url" "$AGNES_BASE_URL"
+          )
+
+          if [ -n "$COVER_KEY" ]; then
+            cmd+=("--cover-key" "$COVER_KEY")
+          fi
+
+          echo "Running: ${cmd[*]}"
+          "${cmd[@]}"
+          exit_code=$?
+          if [ $exit_code -ne 0 ]; then
+            echo "::error::B站上传失败，退出码 $exit_code"
+            exit $exit_code
+          fi
+
+      - name: 上传截图（失败时）
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: bilibili-upload-failed-${{ env.TASK_ID }}
+          path: bilibili_work/
+          retention-days: 7

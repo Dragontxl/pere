@@ -14,6 +14,7 @@ export default function CreateTask() {
   const [orientation, setOrientation] = useState('landscape');
   const [language, setLanguage] = useState('zh');
   const [enableSubtitle, setEnableSubtitle] = useState(true);
+  const [bilibiliUpload, setBilibiliUpload] = useState(false);
   const [bgmKey, setBgmKey] = useState('');
   const [bgmOptions, setBgmOptions] = useState<BgmOption[]>([]);
   const [customBgmKey, setCustomBgmKey] = useState('');
@@ -107,6 +108,7 @@ export default function CreateTask() {
         language,
         enable_subtitle: enableSubtitle,
         bgm_key: customBgmKey || bgmKey || undefined,
+        bilibili_upload: bilibiliUpload,
       });
 
       navigate(`/tasks/${data.id}`);
@@ -262,6 +264,17 @@ export default function CreateTask() {
                 onChange={(e) => setEnableSubtitle(e.target.checked)}
               />
               <span>添加字幕</span>
+            </label>
+          </div>
+
+          <div className="form-group checkbox-group">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={bilibiliUpload}
+                onChange={(e) => setBilibiliUpload(e.target.checked)}
+              />
+              <span>自动上传到 B站（需先在设置中配置 Cookie）</span>
             </label>
           </div>
 

@@ -1,6 +1,7 @@
 import { Bindings } from '../types/env';
 import { Task, TaskPhase, TaskStatus, phaseOrder, phaseStatusMap } from '../types';
 import { findBgmName } from '../constants/bgm';
+import { BilibiliService } from './BilibiliService';
 
 // ── Time-based progress constants ──────────────────────────────────────────
 // Static duration estimates (ms) used ONLY for phases that have not started
@@ -58,6 +59,7 @@ export class TaskService {
     language: string;
     enableSubtitle: boolean;
     bgmKey?: string | null;
+    bilibiliUpload?: boolean;
   }): Promise<Task> {
     const now = new Date().toISOString();
     const bgmName = findBgmName(data.bgmKey);
@@ -73,6 +75,10 @@ export class TaskService {
       enable_subtitle: data.enableSubtitle !== false,
       bgm_key: data.bgmKey || null,
       bgm_name: bgmName,
+      bilibili_upload: data.bilibiliUpload === true,
+      bilibili_status: null,
+      bilibili_bvid: null,
+      bilibili_url: null,
       status: 'PENDING',
       current_phase: 'ARTICLE_PARSE',
       scenes_key: null,
@@ -101,11 +107,13 @@ export class TaskService {
     await this.env.DB.prepare(`
       INSERT INTO tasks (
         id, user_id, title, article_source, article_content, article_file_key,
-        orientation, language, enable_subtitle, bgm_key, bgm_name, status, current_phase, progress,
+        orientation, language, enable_subtitle, bgm_key, bgm_name,
+        bilibili_upload, bilibili_status, bilibili_bvid, bilibili_url,
+        status, current_phase, progress,
         retry_count, max_retries, processed_frames, total_frames, failed_frames,
         start_phase, end_phase, phase_details,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       task.id,
       task.user_id,
@@ -118,6 +126,10 @@ export class TaskService {
       task.enable_subtitle,
       task.bgm_key,
       task.bgm_name,
+      task.bilibili_upload,
+      task.bilibili_status,
+      task.bilibili_bvid,
+      task.bilibili_url,
       task.status,
       task.current_phase,
       task.progress,
@@ -824,8 +836,33 @@ export class TaskService {
         .bind(data.cover_image_key, taskId).run();
     }
 
+    // Auto-upload to Bilibili if the user opted in and the video is ready
+    await this.maybeAutoUploadBilibili(taskId);
+
     await this.logTask(taskId, phase, 'INFO', `Task completed: ${JSON.stringify(data || {})}`);
     return { success: true, taskId };
+  }
+
+  /**
+   * 视频完成后，若用户选择自动上传B站且凭据已配置，自动触发上传
+   */
+  private async maybeAutoUploadBilibili(taskId: string): Promise<void> {
+    try {
+      const task = await this.getTask(taskId);
+      if (!task || !task.bilibili_upload) return;
+      if (task.bilibili_status) return; // 已上传或正在上传
+
+      const biliService = new BilibiliService(this.env);
+      const credStatus = await biliService.getCredentialStatus(task.user_id);
+      if (!credStatus.configured) {
+        await this.logTask(taskId, 'BILIBILI', 'WARN', '已选择自动上传B站，但未配置B站凭据，跳过自动上传');
+        return;
+      }
+      await biliService.triggerUpload(taskId, task.user_id);
+    } catch (error) {
+      console.error('Auto-upload to Bilibili failed:', error);
+      await this.logTask(taskId, 'BILIBILI', 'WARN', `自动上传B站失败: ${(error as Error).message}`);
+    }
   }
 
   /**
@@ -916,6 +953,8 @@ export class TaskService {
               updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now')
             WHERE id = ? AND status = ?
           `).bind('COMPLETED', taskId, 'FAILED').run();
+          // Video is ready — auto-upload to Bilibili if the user opted in
+          await this.maybeAutoUploadBilibili(taskId);
         }
         await this.markPhaseDone(taskId, phase);
         if (message) {
@@ -938,6 +977,8 @@ export class TaskService {
           WHERE id = ?
         `).bind('COMPLETED', taskId).run();
         await this.logTask(taskId, phase, 'INFO', `Range execution completed: ${startPhase} to ${endPhase}`);
+        // Video is ready — auto-upload to Bilibili if the user opted in
+        await this.maybeAutoUploadBilibili(taskId);
         return { success: true, taskId };
       }
 

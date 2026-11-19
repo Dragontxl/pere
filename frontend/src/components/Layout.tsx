@@ -28,6 +28,9 @@ export default function Layout() {
             <NavLink to="/files" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
               文件管理
             </NavLink>
+            <NavLink to="/settings" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
+              设置
+            </NavLink>
           </nav>
         </div>
         <div className="header-right">

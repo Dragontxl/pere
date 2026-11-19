@@ -55,6 +55,10 @@ export interface Task {
   final_video_key: string | null;
   final_video_url: string | null;
   cover_image_key: string | null;
+  bilibili_upload: boolean;
+  bilibili_status: string | null;
+  bilibili_bvid: string | null;
+  bilibili_url: string | null;
   progress: number;
   retry_count: number;
   max_retries: number;
@@ -81,6 +85,12 @@ export interface TaskLog {
   message: string;
   metadata: string | null;
   created_at: string;
+}
+
+export interface BilibiliCredentialStatus {
+  configured: boolean;
+  hasSessdata: boolean;
+  hasBiliJct: boolean;
 }
 
 export interface LoginResponse {

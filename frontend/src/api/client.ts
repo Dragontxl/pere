@@ -1,4 +1,4 @@
-import type { ApiResponse, Task, TaskLog, LoginResponse, BgmOption, PhaseMaterialCheck, FileListResult, FileStats } from '../types';
+import type { ApiResponse, Task, TaskLog, LoginResponse, BgmOption, PhaseMaterialCheck, FileListResult, FileStats, BilibiliCredentialStatus } from '../types';
 
 const API_BASE = '/api/v1';
 
@@ -95,6 +95,7 @@ export const taskApi = {
     language: string;
     enable_subtitle: boolean;
     bgm_key?: string;
+    bilibili_upload?: boolean;
   }): Promise<Task> {
     return request<Task>('/tasks', {
       method: 'POST',
@@ -159,6 +160,13 @@ export const taskApi = {
         images,
         types,
       }),
+    });
+  },
+
+  // 手动上传到 B站
+  async uploadBilibili(id: string): Promise<void> {
+    await request<null>(`/tasks/${id}/bilibili-upload`, {
+      method: 'POST',
     });
   },
 };
@@ -299,5 +307,29 @@ export const fileApi = {
 export const bgmApi = {
   async options(): Promise<BgmOption[]> {
     return request<BgmOption[]>('/bgm/options');
+  },
+};
+
+// ── Bilibili ────────────────────────────────────────────────────────────
+
+export const bilibiliApi = {
+  /** 获取当前用户 B站凭据状态 */
+  async getCredentialStatus(): Promise<BilibiliCredentialStatus> {
+    return request<BilibiliCredentialStatus>('/bilibili/credentials');
+  },
+
+  /** 保存 B站 Cookie */
+  async saveCredentials(cookies: string): Promise<BilibiliCredentialStatus> {
+    return request<BilibiliCredentialStatus>('/bilibili/credentials', {
+      method: 'POST',
+      body: JSON.stringify({ cookies }),
+    });
+  },
+
+  /** 删除 B站凭据 */
+  async deleteCredentials(): Promise<{ deleted: boolean }> {
+    return request<{ deleted: boolean }>('/bilibili/credentials', {
+      method: 'DELETE',
+    });
   },
 };

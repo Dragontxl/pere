@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { TaskService } from '../../services/TaskService';
+import { BilibiliService } from '../../services/BilibiliService';
 import { Bindings } from '../../types/env';
 import { authMiddleware } from '../../middleware/auth';
 
@@ -61,6 +62,7 @@ taskRoutes.post('/', async (c) => {
       language: body.language || 'zh',
       enableSubtitle: body.enable_subtitle !== false,
       bgmKey: body.bgm_key || null,
+      bilibiliUpload: body.bilibili_upload === true,
     });
 
     try {
@@ -231,6 +233,25 @@ taskRoutes.post('/:id/rerender-clips', async (c) => {
   } catch (error) {
     console.error('Failed to re-render clips:', error);
     return c.json({ code: 500, data: null, msg: 'Failed to re-render clips: ' + (error as Error).message }, 500);
+  }
+});
+
+/**
+ * POST /api/v1/tasks/:id/bilibili-upload
+ * 手动触发 B站上传（用户在任务详情页点击"上传B站"按钮）
+ * 校验视频已生成、凭据已配置后，dispatch GitHub Actions workflow 执行上传。
+ */
+taskRoutes.post('/:id/bilibili-upload', async (c) => {
+  const userId = c.get('userId');
+  const taskId = c.req.param('id');
+  const biliService = new BilibiliService(c.env as Bindings);
+
+  try {
+    await biliService.triggerUpload(taskId, userId);
+    return c.json({ code: 200, data: null, msg: 'B站上传已触发' });
+  } catch (error) {
+    console.error('Bilibili upload trigger error:', error);
+    return c.json({ code: 400, data: null, msg: (error as Error).message }, 400);
   }
 });
 
