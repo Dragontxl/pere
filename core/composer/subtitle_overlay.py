@@ -156,7 +156,8 @@ def add_subtitles(
             audio_codec=audio_codec,
             threads=4,
             preset='fast',
-            ffmpeg_params=['-crf', str(crf), '-movflags', '+faststart']
+            # 强制 yuv420p，与主视频片段像素格式一致，保证流拷贝拼接可用
+            ffmpeg_params=['-pix_fmt', 'yuv420p', '-crf', str(crf), '-movflags', '+faststart']
         )
     except Exception as e:
         video_clip.close()
