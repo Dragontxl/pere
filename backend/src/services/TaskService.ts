@@ -321,20 +321,24 @@ export class TaskService {
     const rangeEnd = endPhase || phase;
     const isRange = rangeStart !== rangeEnd;
 
+    // GitHub 限制 repository_dispatch 的 client_payload 最多 10 个顶层属性。
+    // 所有任务参数统一打包进单个 task 嵌套对象，避免字段增加后再次触发 422。
     const payload: Record<string, any> = {
       event_type: 'video-generation',
       client_payload: {
-        task_id: taskId,
-        title: task.title,
-        article_source: task.article_source,
-        article_content: task.article_content || '',
-        article_file_key: task.article_file_key || '',
-        orientation: task.orientation,
-        language: task.language,
-        enable_subtitle: task.enable_subtitle,
-        bgm_key: task.bgm_key || '',
-        start_phase: rangeStart,
-        end_phase: rangeEnd,
+        task: {
+          task_id: taskId,
+          title: task.title,
+          article_source: task.article_source,
+          article_content: task.article_content || '',
+          article_file_key: task.article_file_key || '',
+          orientation: task.orientation,
+          language: task.language,
+          enable_subtitle: task.enable_subtitle,
+          bgm_key: task.bgm_key || '',
+          start_phase: rangeStart,
+          end_phase: rangeEnd,
+        },
       },
     };
 
@@ -490,23 +494,26 @@ export class TaskService {
       }
     }
 
+    // 同样打包进单个 task 对象，避免超出 GitHub client_payload 的 10 属性上限
     const payload = {
       event_type: 'video-generation',
       client_payload: {
-        task_id: taskId,
-        title: task.title,
-        article_source: task.article_source,
-        article_content: task.article_content || '',
-        article_file_key: task.article_file_key || '',
-        orientation: task.orientation,
-        language: task.language,
-        enable_subtitle: task.enable_subtitle,
-        bgm_key: task.bgm_key || '',
-        start_phase: 'VIDEO_COMPOSE',
-        end_phase: 'VIDEO_COMPOSE',
-        rerender_clips: rerenderClipsSpec,
-        rerender_image: rerenderImages,
-        rerender_type: rerenderTypes,
+        task: {
+          task_id: taskId,
+          title: task.title,
+          article_source: task.article_source,
+          article_content: task.article_content || '',
+          article_file_key: task.article_file_key || '',
+          orientation: task.orientation,
+          language: task.language,
+          enable_subtitle: task.enable_subtitle,
+          bgm_key: task.bgm_key || '',
+          start_phase: 'VIDEO_COMPOSE',
+          end_phase: 'VIDEO_COMPOSE',
+          rerender_clips: rerenderClipsSpec,
+          rerender_image: rerenderImages,
+          rerender_type: rerenderTypes,
+        },
       },
     };
 
