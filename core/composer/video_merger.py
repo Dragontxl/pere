@@ -38,6 +38,64 @@ def _resolve_ffprobe() -> str | None:
 FFPROBE_EXE = _resolve_ffprobe()
 
 
+def _probe_clip_params(path: str) -> dict | None:
+    """用 ffprobe 探测片段编码参数（pix_fmt/width/height）
+
+    仅用于流拷贝一致性预检，探测失败返回 None。
+    """
+    if not FFPROBE_EXE:
+        return None
+    try:
+        result = subprocess.run(
+            [FFPROBE_EXE, "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=pix_fmt,width,height",
+             "-of", "json", path],
+            capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=10
+        )
+        if result.returncode != 0:
+            return None
+        import json
+        stream = json.loads(result.stdout).get("streams", [{}])[0]
+        return {
+            "pix_fmt": stream.get("pix_fmt", ""),
+            "width": int(stream.get("width", 0) or 0),
+            "height": int(stream.get("height", 0) or 0),
+        }
+    except Exception:
+        return None
+
+
+def _normalize_clip_pix_fmt(path: str, target_pix_fmt: str) -> str:
+    """将单个片段的像素格式归一化到目标格式（视频流重编码，音频直拷）
+
+    仅在片段 pix_fmt 与目标不一致时调用。返回临时文件路径，调用方负责清理。
+    使用快速预设，只重编码不匹配的少量片段，对整体拼接耗时影响很小。
+    """
+    tmp_out = tempfile.NamedTemporaryFile(
+        suffix=".mp4", delete=False, encoding="utf-8"
+    ).name
+    cmd = [
+        FFMPEG_EXE, "-y", "-i", path,
+        "-c:v", "libx264", "-preset", "veryfast",
+        "-pix_fmt", target_pix_fmt,
+        "-c:a", "copy",
+        "-movflags", "+faststart",
+        tmp_out,
+    ]
+    result = subprocess.run(
+        cmd, capture_output=True, text=True,
+        encoding="utf-8", errors="replace", timeout=180
+    )
+    if result.returncode != 0 or not os.path.exists(tmp_out) or os.path.getsize(tmp_out) == 0:
+        if os.path.exists(tmp_out):
+            os.unlink(tmp_out)
+        raise RuntimeError(
+            f"pix_fmt 归一化失败: {os.path.basename(path)}: {result.stderr.strip()}"
+        )
+    return tmp_out
+
+
 def merge_clips_stream_copy(clip_paths: list, output_path: str) -> str:
     """流拷贝拼接视频片段（零重编码，速度极快）
 
@@ -45,8 +103,9 @@ def merge_clips_stream_copy(clip_paths: list, output_path: str) -> str:
     拼接成完整视频，不解码、不重编码。要求所有片段编码参数一致
     （同 codec、分辨率、fps、pixel_format、profile、level）。
 
-    拼接前会逐片检查 pix_fmt，参数不一致时主动抛出异常，
-    避免流拷贝"成功"但产生静默颜色失真。
+    拼接前会逐片探测编码参数；pix_fmt 不一致的片段会先归一化到多数
+    片段使用的格式（默认 yuv420p），从而保证流拷贝始终可用，避免
+    回退重编码。分辨率不一致时无法简单归一化，则回退重编码。
 
     Args:
         clip_paths: 视频片段路径列表（按顺序）
@@ -61,33 +120,51 @@ def merge_clips_stream_copy(clip_paths: list, output_path: str) -> str:
     if not clip_paths:
         raise RuntimeError("没有视频片段可拼接")
 
-    # 预检查：所有片段的 pix_fmt 必须一致，否则流拷贝会产生静默颜色失真
+    # 预检查：探测所有片段编码参数
     if not FFPROBE_EXE:
         # 没有 ffprobe 就无法做一致性预检查，直接回退重编码（FFMPEG_EXE 一定可用）
         raise RuntimeError("未找到 ffprobe，跳过流拷贝，改用重编码拼接")
 
-    pix_fmts = set()
+    params_list = []
     for path in clip_paths:
-        try:
-            result = subprocess.run(
-                [FFPROBE_EXE, "-v", "error", "-select_streams", "v:0",
-                 "-show_entries", "stream=pix_fmt", "-of", "csv=p=0", path],
-                capture_output=True, text=True,
-                encoding="utf-8", errors="replace", timeout=10
-            )
-            fmt = result.stdout.strip().rstrip(',')
-            if fmt:
-                pix_fmts.add(fmt)
-        except Exception:
-            # 检查失败的片段直接跳过流拷贝
+        p = _probe_clip_params(path)
+        if p is None:
             raise RuntimeError(f"流拷贝预检查失败: {path}")
+        params_list.append(p)
 
-    if len(pix_fmts) > 1:
-        raise RuntimeError(f"片段编码参数不一致: {pix_fmts}，无法流拷贝拼接")
+    # 目标像素格式：取出现次数最多的 pix_fmt，无则默认 yuv420p
+    from collections import Counter
+    pix_counter = Counter(p["pix_fmt"] for p in params_list if p["pix_fmt"])
+    target_pix = pix_counter.most_common(1)[0][0] if pix_counter else "yuv420p"
+
+    # 分辨率必须一致（pix_fmt 可归一化，但分辨率不一致无法简单归一化）
+    dims = {(p["width"], p["height"]) for p in params_list}
+    if len(dims) > 1:
+        raise RuntimeError(f"片段分辨率不一致: {dims}，无法流拷贝拼接")
+
+    # 将 pix_fmt 与目标不一致的片段归一化到目标格式
+    normalized_paths = []
+    normalized_files = []
+    try:
+        for path, p in zip(clip_paths, params_list):
+            if p["pix_fmt"] and p["pix_fmt"] != target_pix:
+                new_path = _normalize_clip_pix_fmt(path, target_pix)
+                normalized_files.append(new_path)
+                normalized_paths.append(new_path)
+                print(f"  🔧 归一化像素格式: {os.path.basename(path)} "
+                      f"{p['pix_fmt']} → {target_pix}")
+            else:
+                normalized_paths.append(path)
+    except Exception:
+        # 归一化失败：清理临时文件并抛出，由调用方回退重编码
+        for f in normalized_files:
+            if os.path.exists(f):
+                os.unlink(f)
+        raise
 
     # 创建 concat 列表文件（ffmpeg concat demuxer 格式）
     concat_list = []
-    for path in clip_paths:
+    for path in normalized_paths:
         abs_path = os.path.abspath(path)
         # Windows 路径含反斜杠，单引号包裹 + 转义
         safe_path = abs_path.replace("'", "'\\''")
@@ -122,9 +199,12 @@ def merge_clips_stream_copy(clip_paths: list, output_path: str) -> str:
     except Exception as e:
         raise RuntimeError(f"流拷贝拼接异常: {e}")
     finally:
-        # 清理临时列表文件
+        # 清理临时列表文件与归一化临时片段
         if os.path.exists(list_file):
             os.unlink(list_file)
+        for f in normalized_files:
+            if os.path.exists(f):
+                os.unlink(f)
 
     return output_path
 
@@ -335,7 +415,8 @@ def combine_audio_video(video_path: str, audio_path: str, output_path: str) -> s
             codec="libx264",
             audio_codec="aac",
             threads=4,
-            ffmpeg_params=['-movflags', '+faststart']
+            # 强制 yuv420p，与主视频片段像素格式一致，避免流拷贝拼接参数不一致
+            ffmpeg_params=['-pix_fmt', 'yuv420p', '-movflags', '+faststart']
         )
     except Exception as e:
         raise RuntimeError(f"音视频合并失败: {e}")
