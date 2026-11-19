@@ -143,7 +143,8 @@ def image_to_clip(
             audio_codec=audio_codec,
             preset=preset,
             threads=threads,
-            ffmpeg_params=['-movflags', '+faststart']
+            # 强制 yuv420p（有限范围），与 Remotion 片段一致，保证流拷贝拼接可用
+            ffmpeg_params=['-pix_fmt', 'yuv420p', '-movflags', '+faststart']
         )
     except Exception as e:
         raise RuntimeError(f"图片转视频片段失败: {image_path} → {output_path}: {e}")
