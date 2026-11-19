@@ -73,7 +73,7 @@ def _normalize_clip_pix_fmt(path: str, target_pix_fmt: str) -> str:
     使用快速预设，只重编码不匹配的少量片段，对整体拼接耗时影响很小。
     """
     tmp_out = tempfile.NamedTemporaryFile(
-        suffix=".mp4", delete=False, encoding="utf-8"
+        suffix=".mp4", delete=False
     ).name
     cmd = [
         FFMPEG_EXE, "-y", "-i", path,
