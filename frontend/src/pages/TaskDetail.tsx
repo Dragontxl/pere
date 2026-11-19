@@ -229,6 +229,10 @@ export default function TaskDetail() {
     ? fileApi.getNoCacheUrl(task.final_video_key)
     : null;
 
+  const coverUrl = task.cover_image_key
+    ? fileApi.getNoCacheUrl(task.cover_image_key)
+    : null;
+
   const isTerminal = isCompleted || isFailed || task.status === 'CANCELLED';
 
   return (
@@ -415,6 +419,29 @@ export default function TaskDetail() {
               </button>
             </div>
           </div>
+
+          {/* Video cover — shown when the pipeline produced a cover image */}
+          {coverUrl && (
+            <div className="card">
+              <h2 className="card-title">视频封面</h2>
+              <div className="video-preview">
+                <img
+                  src={coverUrl}
+                  alt="视频封面"
+                  className="video-player cover-image"
+                  style={{ objectFit: 'cover', width: '100%' }}
+                />
+              </div>
+              <div className="video-actions">
+                <a href={coverUrl} download className="btn btn-primary">
+                  ⬇ 下载封面
+                </a>
+                {task.cover_image_key && (
+                  <span className="video-key">R2 Key: {task.cover_image_key}</span>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Video preview — shown whenever a final video key exists, even if the
               task status is stuck in a non-terminal state (e.g. a stale FAILED

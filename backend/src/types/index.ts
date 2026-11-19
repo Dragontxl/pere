@@ -57,6 +57,7 @@ export interface Task {
   match_results_key: string | null;
   final_video_key: string | null;
   final_video_url: string | null;
+  cover_image_key: string | null;
   progress: number;
   retry_count: number;
   max_retries: number;

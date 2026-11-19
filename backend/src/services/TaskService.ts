@@ -79,6 +79,7 @@ export class TaskService {
       match_results_key: null,
       final_video_key: null,
       final_video_url: null,
+      cover_image_key: null,
       progress: 0,
       retry_count: 0,
       max_retries: 3,
@@ -310,6 +311,7 @@ export class TaskService {
       event_type: 'video-generation',
       client_payload: {
         task_id: taskId,
+        title: task.title,
         article_source: task.article_source,
         article_content: task.article_content || '',
         article_file_key: task.article_file_key || '',
@@ -478,6 +480,7 @@ export class TaskService {
       event_type: 'video-generation',
       client_payload: {
         task_id: taskId,
+        title: task.title,
         article_source: task.article_source,
         article_content: task.article_content || '',
         article_file_key: task.article_file_key || '',
@@ -815,6 +818,12 @@ export class TaskService {
         .bind(data.final_video_key, data.final_video_url || null, taskId).run();
     }
 
+    // Store cover image key if provided
+    if (data?.cover_image_key) {
+      await this.env.DB.prepare(`UPDATE tasks SET cover_image_key = ? WHERE id = ?`)
+        .bind(data.cover_image_key, taskId).run();
+    }
+
     await this.logTask(taskId, phase, 'INFO', `Task completed: ${JSON.stringify(data || {})}`);
     return { success: true, taskId };
   }
@@ -864,6 +873,13 @@ export class TaskService {
       await this.env.DB.prepare(`
         UPDATE tasks SET final_video_key = ?, final_video_url = ?, updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?
       `).bind(body.final_video_key, body.final_video_url || null, taskId).run();
+    }
+
+    // Video cover key, if the pipeline produced one.
+    if (body.cover_image_key) {
+      await this.env.DB.prepare(`
+        UPDATE tasks SET cover_image_key = ?, updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?
+      `).bind(body.cover_image_key, taskId).run();
     }
 
     // Never touch a task that already reached a terminal state.

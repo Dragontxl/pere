@@ -19,6 +19,10 @@ on:
         description: '话题（填写则用 AI 生成文章，优先于 content/file_key）'
         required: false
         type: string
+      title:
+        description: '项目名称（用作封面搜索关键词与叠加文字，留空则无封面）'
+        required: false
+        type: string
       orientation:
         description: '图片方向'
         required: false
@@ -92,6 +96,7 @@ env:
   LANGUAGE: ${{ github.event.inputs.language || github.event.client_payload.language || 'zh' }}
   ORIENTATION: ${{ github.event.inputs.orientation || github.event.client_payload.orientation || 'landscape' }}
   RERENDER_CLIPS: ${{ github.event.inputs.rerender_clips || github.event.client_payload.rerender_clips || '' }}
+  TITLE: ${{ github.event.inputs.title || github.event.client_payload.title || '' }}
 
 jobs:
   # ══════════════════════════════════════════════════════════════
@@ -170,6 +175,7 @@ jobs:
 
           if [ -n "$payload" ] && [ "$payload" != "{}" ]; then
             task_id=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('task_id',''))")
+            title=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('title',''))")
             article_source=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('article_source','pasted'))")
             article_content=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('article_content',''))")
             article_file_key=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('article_file_key',''))")
@@ -182,6 +188,7 @@ jobs:
             rerender_clips=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('rerender_clips',''))")
           else
             task_id="${{ inputs.task_id }}"
+            title="${{ inputs.title }}"
             article_source="pasted"
             article_content="${{ inputs.article_content }}"
             article_file_key="${{ inputs.article_file_key }}"
@@ -222,6 +229,7 @@ jobs:
           echo "START_PHASE=$start_phase" >> $GITHUB_ENV
           echo "END_PHASE=$end_phase" >> $GITHUB_ENV
           echo "RERENDER_CLIPS=$rerender_clips" >> $GITHUB_ENV
+          echo "TITLE=$title" >> $GITHUB_ENV
 
           phase_order=(ARTICLE_PARSE SCENE_GEN IMAGE_DOWNLOAD ASSET_MATCH RENDER_DECISION TTS_SYNTH VIDEO_COMPOSE)
           start_idx=$(printf "%s\n" "${phase_order[@]}" | grep -n "$start_phase" | head -1 | cut -d: -f1)
@@ -239,6 +247,8 @@ jobs:
           echo "enable_subtitle=$enable_subtitle" >> $GITHUB_OUTPUT
           echo "bgm_key=$bgm_key" >> $GITHUB_OUTPUT
           echo "language=$language" >> $GITHUB_OUTPUT
+          echo "title=$title" >> $GITHUB_OUTPUT
+          echo "orientation=$orientation" >> $GITHUB_OUTPUT
 
           echo "Task: $task_id"
           echo "Phases: $start_phase ($((start_idx - 1))) -> $end_phase ($((end_idx - 1)))"
@@ -308,6 +318,7 @@ jobs:
           cmd=(
             "python" "main.py"
             "--task-id" "$TASK_ID"
+            "--title" "$TITLE"
             "--article-source" "$ARTICLE_SOURCE"
             "--start-phase" "$START_PHASE"
             "--end-phase" "$END_PHASE"
@@ -606,12 +617,16 @@ jobs:
           ENABLE_SUBTITLE: ${{ needs.pipeline.outputs.enable_subtitle }}
           BGM_KEY: ${{ needs.pipeline.outputs.bgm_key }}
           LANGUAGE: ${{ needs.pipeline.outputs.language }}
+          TITLE: ${{ needs.pipeline.outputs.title }}
+          ORIENTATION: ${{ needs.pipeline.outputs.orientation }}
         shell: bash
         run: |
           cmd=(
             "python" "main.py"
             "--assemble-mode"
             "--task-id" "$TASK_ID"
+            "--title" "$TITLE"
+            "--orientation" "$ORIENTATION"
             "--output-dir" "./output"
             "--callback-url" "$CALLBACK_URL"
             "--callback-secret" "$CALLBACK_SECRET"

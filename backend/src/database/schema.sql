@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     match_results_key TEXT,
     final_video_key TEXT,
     final_video_url TEXT,
+    cover_image_key TEXT,
     progress INTEGER DEFAULT 0,
     retry_count INTEGER DEFAULT 0,
     max_retries INTEGER DEFAULT 3,
@@ -60,6 +61,9 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at);
 CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks(user_id);
+
+-- Migration: add cover_image_key column for video cover feature
+ALTER TABLE tasks ADD COLUMN cover_image_key TEXT;
 
 -- Operation logs table (reused)
 CREATE TABLE IF NOT EXISTS operation_logs (

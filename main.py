@@ -38,6 +38,7 @@ from core.composer.image_to_clip import image_to_clip
 from core.composer.tts_synthesis import synthesize_speech
 from core.composer.video_merger import merge_clips
 from core.composer.subtitle_overlay import add_subtitles
+from core.composer.cover_generator import generate_cover_image
 from core.composer.clip_finalizer import (
     finalize_clip,
     add_silent_audio,
@@ -132,6 +133,12 @@ def parse_args():
         type=str,
         default=None,
         help="话题要求（使用智能体生成文章，适合 CI 模式）"
+    )
+    parser.add_argument(
+        "--title",
+        type=str,
+        default=None,
+        help="项目名称（用作封面搜索关键词与叠加文字；CI 模式由后端传入任务标题）"
     )
     parser.add_argument(
         "--output-dir",
@@ -499,6 +506,58 @@ def save_phase_artifact(
         r2_config.get("secret_access_key"),
         r2_config.get("endpoint"),
     )
+
+
+def _generate_and_upload_cover(
+    project_name: str,
+    final_output: str,
+    work_dir: Path,
+    r2_config: dict | None,
+    r2_prefix: str | None,
+    orientation: str,
+    api_key: str | None,
+) -> str | None:
+    """生成视频封面并上传到 R2，返回 R2 key
+
+    封面生成失败仅记录日志并返回 None，绝不阻断视频产出流程。
+
+    Args:
+        project_name: 项目名称（搜索关键词与叠加文字）
+        final_output: 最终视频路径（用于探测封面比例）
+        work_dir: 工作目录（封面输出目录）
+        r2_config: R2 配置
+        r2_prefix: R2 前缀
+        orientation: 方向兜底
+        api_key: Pexels API key
+
+    Returns:
+        封面的 R2 key；未生成或未上传时返回 None
+    """
+    try:
+        cover_path = generate_cover_image(
+            project_name=project_name,
+            video_path=final_output,
+            output_dir=str(work_dir),
+            api_key=api_key,
+            orientation=orientation,
+        )
+        if not cover_path:
+            return None
+        if not r2_config or not r2_prefix:
+            return None
+        cover_key = f"{r2_prefix}/cover.jpg"
+        upload_to_r2(
+            cover_path, cover_key,
+            r2_config["bucket"],
+            r2_config["access_key_id"],
+            r2_config["secret_access_key"],
+            r2_config["endpoint"],
+        )
+        print(f"  ☁️ 封面已上传: {cover_key}")
+        return cover_key
+    except Exception as e:
+        print(f"  ⚠️ 封面上传失败（不影响视频产出）: {e}")
+        return None
 
 
 def load_phase_artifact(
@@ -2641,6 +2700,7 @@ def main():
         try:
             final_output = rerender_clips(work_dir, config, render_params, args)
 
+            r2_config = None
             # 上传最终视频到 R2
             if final_output and args.r2_bucket and args.r2_access_key_id and args.r2_secret_access_key and args.r2_endpoint and args.r2_prefix:
                 r2_config = {
@@ -2658,6 +2718,17 @@ def main():
                     r2_config["endpoint"],
                 )
 
+            # 生成并上传视频封面（失败不阻断）
+            cover_key = _generate_and_upload_cover(
+                project_name=args.title or args.topic or "",
+                final_output=final_output,
+                work_dir=work_dir,
+                r2_config=r2_config if (args.r2_bucket and args.r2_prefix) else None,
+                r2_prefix=args.r2_prefix,
+                orientation=args.orientation or config.get("image_orientation", "landscape"),
+                api_key=config.get("pexels_api_key"),
+            )
+
             # 发送完成回调
             if args.task_id:
                 send_callback(
@@ -2668,6 +2739,8 @@ def main():
                         "message": "重渲染完成",
                         "final_video_key": f"{args.r2_prefix}/final_output.mp4" if (args.r2_bucket and args.r2_prefix) else "final_output.mp4",
                         "final_video_url": f"{args.r2_prefix}/final_output.mp4" if (args.r2_bucket and args.r2_prefix) else None,
+                        "cover_image_key": cover_key,
+                        "cover_image_url": cover_key,
                     },
                     args.callback_url,
                     args.callback_secret,
@@ -2757,6 +2830,17 @@ def main():
                     r2_config["endpoint"],
                 )
 
+            # 生成并上传视频封面（失败不阻断）
+            cover_key = _generate_and_upload_cover(
+                project_name=args.title or args.topic or "",
+                final_output=final_output,
+                work_dir=work_dir,
+                r2_config=r2_config,
+                r2_prefix=args.r2_prefix,
+                orientation=args.orientation or config.get("image_orientation", "landscape"),
+                api_key=config.get("pexels_api_key"),
+            )
+
             if args.task_id:
                 send_callback(
                     {
@@ -2766,6 +2850,8 @@ def main():
                         "message": "视频拼接完成",
                         "final_video_key": f"{args.r2_prefix}/final_output.mp4" if r2_config else "final_output.mp4",
                         "final_video_url": f"{args.r2_prefix}/final_output.mp4" if r2_config else None,
+                        "cover_image_key": cover_key,
+                        "cover_image_url": cover_key,
                     },
                     args.callback_url,
                     args.callback_secret,
@@ -3162,6 +3248,17 @@ def main():
                         r2_config["endpoint"],
                     )
 
+                # 生成并上传视频封面（失败不阻断）
+                cover_key = _generate_and_upload_cover(
+                    project_name=args.title or args.topic or "",
+                    final_output=final_output,
+                    work_dir=work_dir,
+                    r2_config=r2_config,
+                    r2_prefix=args.r2_prefix,
+                    orientation=args.orientation or config.get("image_orientation", "landscape"),
+                    api_key=config.get("pexels_api_key"),
+                )
+
                 _cb_phase_done("VIDEO_COMPOSE")
 
                 # 发送完成回调（含最终视频信息）
@@ -3174,6 +3271,8 @@ def main():
                             "message": "视频生成完成",
                             "final_video_key": f"{args.r2_prefix}/final_output.mp4" if r2_config else "final_output.mp4",
                             "final_video_url": f"{args.r2_prefix}/final_output.mp4" if r2_config else None,
+                            "cover_image_key": cover_key,
+                            "cover_image_url": cover_key,
                         },
                         args.callback_url,
                         args.callback_secret,
