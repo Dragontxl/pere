@@ -20,6 +20,11 @@ output/
 !assets/bgm/*.mp3
 !assets/bgm/*.wav
 
+# 片尾固定图片需要提交到仓库（片尾视频生成依赖，CI 通过 checkout 获取）
+!assets/outro/
+!assets/outro/*.jpg
+!assets/outro/*.png
+
 # Remotion
 remotion/node_modules/
 remotion/dist/

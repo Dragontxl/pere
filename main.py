@@ -560,6 +560,46 @@ def _generate_and_upload_cover(
         return None
 
 
+def _append_outro_clip(
+    clip_paths: list,
+    work_dir: Path,
+    render_params: dict,
+    api_key: str | None,
+    language: str,
+) -> None:
+    """在片段列表末尾追加固定片尾视频（失败不阻断）
+
+    片尾由固定图片 + 固定语音「今天的分享就到这里，我们下次再会。」生成，
+    编码参数与主视频一致，可直接参与流拷贝拼接。
+
+    Args:
+        clip_paths: 视频片段路径列表（原地追加片尾路径）
+        work_dir: 工作目录（片尾中间文件输出目录）
+        render_params: 渲染参数（分辨率/fps/编码等，与主视频一致）
+        api_key: Pexels API key（本地片尾图片缺失时下载用）
+        language: 语音语言
+    """
+    try:
+        from core.composer.outro_video import generate_outro_clip
+
+        outro = generate_outro_clip(
+            work_dir=work_dir,
+            resolution=(render_params["resolution_width"], render_params["resolution_height"]),
+            fps=render_params["fps"],
+            codec=render_params["codec"],
+            audio_codec=render_params["audio_codec"],
+            preset=render_params["preset"],
+            threads=render_params["threads"],
+            api_key=api_key,
+            language=language,
+        )
+        if outro:
+            clip_paths.append(outro)
+            print(f"  🎬 已追加固定片尾视频（{os.path.basename(outro)}）")
+    except Exception as e:
+        print(f"  ⚠️ 片尾视频追加失败（不影响主视频）: {e}")
+
+
 def load_phase_artifact(
     artifact_name: str,
     work_dir: Path,
@@ -1970,6 +2010,9 @@ def rerender_clips(work_dir, config: dict, render_params: dict, args) -> str:
         print("❌ 没有可用的视频片段，无法拼接")
         raise RuntimeError("没有可用的视频片段")
 
+    # 追加固定片尾视频（失败不阻断）
+    _append_outro_clip(clip_paths, work_dir, render_params, config.get("pexels_api_key"), args.language)
+
     final_output = work_dir / "final_output.mp4"
     merge_clips(clip_paths, str(final_output))
     print(f"  ✅ 拼接完成（{len(clip_paths)} 个片段）")
@@ -2156,6 +2199,9 @@ def compose_video(
     # 6c. 流拷贝拼接（所有片段已含音频+字幕，零重编码）
     # 每个片段在渲染阶段已烧录字幕+合并音频，直接拼接码流即可
     print("\n📋 流拷贝拼接最终视频...")
+    # 追加固定片尾视频（失败不阻断）
+    _append_outro_clip(clip_paths, work_dir, render_params, config.get("pexels_api_key"), args.language)
+
     final_output = work_dir / "final_output.mp4"
     merge_clips(clip_paths, str(final_output))
 
@@ -2613,6 +2659,9 @@ def assemble_from_r2(
         raise RuntimeError("没有可用的视频片段，无法拼接")
 
     print(f"  📋 拼接 {len(clip_paths)} 个片段...")
+    # 追加固定片尾视频（失败不阻断）
+    _append_outro_clip(clip_paths, work_dir, render_params, None, args.language)
+
     final_output = work_dir / "final_output.mp4"
     merge_clips(clip_paths, str(final_output))
 
