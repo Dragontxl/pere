@@ -138,10 +138,18 @@ jobs:
           restore-keys: npm-${{ runner.os }}-
           retention-days: 14
 
+      - name: 缓存 apt 包
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-${{ runner.os }}-v3
+          retention-days: 7
+
       - name: 安装系统依赖
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends imagemagick fonts-noto-cjk ffmpeg
+          sudo rm -rf /var/lib/apt/lists/*
 
       - name: 安装 Python 依赖
         run: |
@@ -471,10 +479,18 @@ jobs:
           restore-keys: npm-${{ runner.os }}-
           retention-days: 14
 
+      - name: 缓存 apt 包
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-${{ runner.os }}-v3
+          retention-days: 7
+
       - name: 安装系统依赖
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends imagemagick fonts-noto-cjk ffmpeg
+          sudo rm -rf /var/lib/apt/lists/*
 
       - name: 安装 Python 依赖
         run: |
@@ -565,7 +581,8 @@ jobs:
     # 重渲染模式不需要拼接 job（main.py 的 rerender 模式已处理拼接）
     if: ${{ needs.pipeline.outputs.rerender_clips == '' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # apt 安装（含 61MB 字体）在慢网络下可能耗时较久，给足预算避免装配阶段被超时取消
+    timeout-minutes: 60
 
     steps:
       - name: 检出代码
@@ -589,10 +606,18 @@ jobs:
           restore-keys: pip-${{ runner.os }}-
           retention-days: 14
 
+      - name: 缓存 apt 包
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-${{ runner.os }}-v3
+          retention-days: 7
+
       - name: 安装系统依赖
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends imagemagick fonts-noto-cjk ffmpeg
+          sudo rm -rf /var/lib/apt/lists/*
 
       - name: 安装 Python 依赖
         run: |
