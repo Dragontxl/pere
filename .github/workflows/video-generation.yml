@@ -90,13 +90,13 @@ permissions:
 
 env:
   # 从 workflow_dispatch 或 repository_dispatch 中提取公共参数
-  TASK_ID: ${{ github.event.inputs.task_id || github.event.client_payload.task_id || '' }}
-  ENABLE_SUBTITLE: ${{ github.event.inputs.enable_subtitle || github.event.client_payload.enable_subtitle || 'true' }}
-  BGM_KEY: ${{ github.event.inputs.bgm_key || github.event.client_payload.bgm_key || '' }}
-  LANGUAGE: ${{ github.event.inputs.language || github.event.client_payload.language || 'zh' }}
-  ORIENTATION: ${{ github.event.inputs.orientation || github.event.client_payload.orientation || 'landscape' }}
-  RERENDER_CLIPS: ${{ github.event.inputs.rerender_clips || github.event.client_payload.rerender_clips || '' }}
-  TITLE: ${{ github.event.inputs.title || github.event.client_payload.title || '' }}
+  TASK_ID: ${{ github.event.inputs.task_id || github.event.client_payload.task.task_id || '' }}
+  ENABLE_SUBTITLE: ${{ github.event.inputs.enable_subtitle || github.event.client_payload.task.enable_subtitle || 'true' }}
+  BGM_KEY: ${{ github.event.inputs.bgm_key || github.event.client_payload.task.bgm_key || '' }}
+  LANGUAGE: ${{ github.event.inputs.language || github.event.client_payload.task.language || 'zh' }}
+  ORIENTATION: ${{ github.event.inputs.orientation || github.event.client_payload.task.orientation || 'landscape' }}
+  RERENDER_CLIPS: ${{ github.event.inputs.rerender_clips || github.event.client_payload.task.rerender_clips || '' }}
+  TITLE: ${{ github.event.inputs.title || github.event.client_payload.task.title || '' }}
 
 jobs:
   # ══════════════════════════════════════════════════════════════
@@ -174,18 +174,20 @@ jobs:
           fi
 
           if [ -n "$payload" ] && [ "$payload" != "{}" ]; then
-            task_id=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('task_id',''))")
-            title=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('title',''))")
-            article_source=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('article_source','pasted'))")
-            article_content=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('article_content',''))")
-            article_file_key=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('article_file_key',''))")
-            orientation=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('orientation','landscape'))")
-            language=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('language','zh'))")
-            enable_subtitle=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('enable_subtitle','true'))")
-            bgm_key=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('bgm_key',''))")
-            start_phase=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('start_phase','ARTICLE_PARSE'))")
-            end_phase=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('end_phase','VIDEO_COMPOSE'))")
-            rerender_clips=$(echo "$payload" | python3 -c "import sys,json; print(json.load(sys.stdin).get('rerender_clips',''))")
+            # 后端将参数打包在 client_payload.task 嵌套对象中（GitHub 限制顶层属性 ≤10）
+            task_obj=$(echo "$payload" | python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin).get('task',{})))")
+            task_id=$(echo "$task_obj" | python3 -c "import sys,json; print(json.load(sys.stdin).get('task_id',''))")
+            title=$(echo "$task_obj" | python3 -c "import sys,json; print(json.load(sys.stdin).get('title',''))")
+            article_source=$(echo "$task_obj" | python3 -c "import sys,json; print(json.load(sys.stdin).get('article_source','pasted'))")
+            article_content=$(echo "$task_obj" | python3 -c "import sys,json; print(json.load(sys.stdin).get('article_content',''))")
+            article_file_key=$(echo "$task_obj" | python3 -c "import sys,json; print(json.load(sys.stdin).get('article_file_key',''))")
+            orientation=$(echo "$task_obj" | python3 -c "import sys,json; print(json.load(sys.stdin).get('orientation','landscape'))")
+            language=$(echo "$task_obj" | python3 -c "import sys,json; print(json.load(sys.stdin).get('language','zh'))")
+            enable_subtitle=$(echo "$task_obj" | python3 -c "import sys,json; print(json.load(sys.stdin).get('enable_subtitle','true'))")
+            bgm_key=$(echo "$task_obj" | python3 -c "import sys,json; print(json.load(sys.stdin).get('bgm_key',''))")
+            start_phase=$(echo "$task_obj" | python3 -c "import sys,json; print(json.load(sys.stdin).get('start_phase','ARTICLE_PARSE'))")
+            end_phase=$(echo "$task_obj" | python3 -c "import sys,json; print(json.load(sys.stdin).get('end_phase','VIDEO_COMPOSE'))")
+            rerender_clips=$(echo "$task_obj" | python3 -c "import sys,json; print(json.load(sys.stdin).get('rerender_clips',''))")
           else
             task_id="${{ inputs.task_id }}"
             title="${{ inputs.title }}"
