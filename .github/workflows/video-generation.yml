@@ -147,8 +147,8 @@ jobs:
 
       - name: 安装系统依赖
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends imagemagick fonts-noto-cjk ffmpeg
+          sudo apt-get update -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 -o Acquire::Retries=3
+          sudo apt-get install -y --no-install-recommends -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 -o Acquire::Retries=3 imagemagick fonts-noto-cjk ffmpeg
           sudo rm -rf /var/lib/apt/lists/*
 
       - name: 安装 Python 依赖
@@ -488,8 +488,8 @@ jobs:
 
       - name: 安装系统依赖
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends imagemagick fonts-noto-cjk ffmpeg
+          sudo apt-get update -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 -o Acquire::Retries=3
+          sudo apt-get install -y --no-install-recommends -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 -o Acquire::Retries=3 imagemagick fonts-noto-cjk ffmpeg
           sudo rm -rf /var/lib/apt/lists/*
 
       - name: 安装 Python 依赖
@@ -615,8 +615,8 @@ jobs:
 
       - name: 安装系统依赖
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends imagemagick fonts-noto-cjk ffmpeg
+          sudo apt-get update -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 -o Acquire::Retries=3
+          sudo apt-get install -y --no-install-recommends -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 -o Acquire::Retries=3 imagemagick fonts-noto-cjk ffmpeg
           sudo rm -rf /var/lib/apt/lists/*
 
       - name: 安装 Python 依赖
