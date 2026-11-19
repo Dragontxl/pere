@@ -136,16 +136,37 @@ adminRoutes.get('/files/list', async (c) => {
     const prefix = c.req.query('prefix') || '';
     const delimiter = c.req.query('delimiter') || '/';
     const cursor = c.req.query('cursor') || undefined;
-    const limit = parseInt(c.req.query('limit') || '1000');
+    const limit = Math.min(parseInt(c.req.query('limit') || '1000'), 1000);
+    const maxPages = Math.min(parseInt(c.req.query('max_pages') || '20'), 100);
 
-    const options: any = { prefix, limit };
-    if (delimiter) options.delimiter = delimiter;
-    if (cursor) options.cursor = cursor;
+    // A single R2 list() call is capped at 1000 entries and every scanned
+    // object counts against that limit, so a prefix holding thousands of keys
+    // (e.g. tasks/) only reveals the first few sub-folders. Follow the cursor
+    // until the listing is complete (bounded by maxPages) so callers see all
+    // folders instead of a silently truncated slice.
+    const objects: any[] = [];
+    const folderSet = new Set<string>();
+    let truncated = false;
+    let nextCursor: string | undefined = cursor;
+    let pages = 0;
 
-    const result = await R2.list(options) as any;
+    do {
+      const options: any = { prefix, limit };
+      if (delimiter) options.delimiter = delimiter;
+      if (nextCursor) options.cursor = nextCursor;
+
+      const result = await R2.list(options) as any;
+
+      for (const obj of result.objects || []) objects.push(obj);
+      for (const fp of result.delimitedPrefixes || []) folderSet.add(fp);
+
+      truncated = !!result.truncated;
+      nextCursor = result.cursor || undefined;
+      pages++;
+    } while (truncated && nextCursor && pages < maxPages);
 
     // Build folder entries from delimited prefixes
-    const folders = (result.delimitedPrefixes || []).map((fp: string) => {
+    const folders = Array.from(folderSet).map((fp: string) => {
       const name = fp.replace(/^\/|\/$/g, '');
       return {
         key: fp,
@@ -157,7 +178,7 @@ adminRoutes.get('/files/list', async (c) => {
     });
 
     // Build file entries from objects
-    const files = result.objects.map((obj: any) => {
+    const files = objects.map((obj: any) => {
       const name = obj.key.split('/').pop() || obj.key;
       return {
         key: obj.key,
@@ -174,9 +195,10 @@ adminRoutes.get('/files/list', async (c) => {
       data: {
         files,
         folders,
-        truncated: result.truncated,
-        cursor: result.cursor || null,
+        truncated: truncated && !!nextCursor,
+        cursor: truncated ? nextCursor || null : null,
         prefix,
+        pages,
       },
       msg: 'success',
     });

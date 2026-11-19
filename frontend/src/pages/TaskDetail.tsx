@@ -416,8 +416,10 @@ export default function TaskDetail() {
             </div>
           </div>
 
-          {/* Video preview */}
-          {isCompleted && videoUrl && (
+          {/* Video preview — shown whenever a final video key exists, even if the
+              task status is stuck in a non-terminal state (e.g. a stale FAILED
+              flag left by an earlier failed callback). */}
+          {videoUrl && (
             <div className="card">
               <h2 className="card-title">视频预览</h2>
               <div className="video-preview">

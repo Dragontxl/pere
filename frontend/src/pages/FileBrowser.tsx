@@ -7,6 +7,9 @@ export default function FileBrowser() {
   const [items, setItems] = useState<FileItem[]>([]);
   const [folders, setFolders] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
   const [stats, setStats] = useState<FileStats | null>(null);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
@@ -23,6 +26,8 @@ export default function FileBrowser() {
       const result = await fileApi.list(prefix);
       setItems(result.files);
       setFolders(result.folders);
+      setNextCursor(result.cursor);
+      setHasMore(result.truncated && !!result.cursor);
       fetchStats();
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载文件失败');
@@ -39,6 +44,29 @@ export default function FileBrowser() {
       // Stats are optional
     }
   }, [prefix]);
+
+  const loadMore = useCallback(async () => {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    setError('');
+    try {
+      const result = await fileApi.list(prefix, nextCursor);
+      setFolders((prev) => {
+        const seen = new Set(prev.map((f) => f.key));
+        return [...prev, ...result.folders.filter((f) => !seen.has(f.key))];
+      });
+      setItems((prev) => {
+        const seen = new Set(prev.map((f) => f.key));
+        return [...prev, ...result.files.filter((f) => !seen.has(f.key))];
+      });
+      setNextCursor(result.cursor);
+      setHasMore(result.truncated && !!result.cursor);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '加载更多失败');
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [prefix, nextCursor, loadingMore]);
 
   useEffect(() => {
     fetchFiles();
@@ -336,6 +364,16 @@ export default function FileBrowser() {
               ))}
             </tbody>
           </table>
+        )}
+        {!loading && hasMore && (
+          <div className="file-browser-footer" style={{ padding: '12px 16px', textAlign: 'center' }}>
+            <span style={{ marginRight: 12 }}>
+              已显示 {folders.length + items.length} 项（该目录对象较多，仅加载了一部分）
+            </span>
+            <button className="btn btn-secondary btn-sm" onClick={loadMore} disabled={loadingMore}>
+              {loadingMore ? '加载中...' : '加载更多'}
+            </button>
+          </div>
         )}
       </div>
 

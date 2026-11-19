@@ -888,6 +888,19 @@ export class TaskService {
     // that phase done. They must never dispatch another workflow run.
     if (!startPhase || !endPhase) {
       if (isSuccess) {
+        // A late success callback for a terminal phase means the pipeline
+        // actually finished — recover a task that an earlier failed callback
+        // (or an aborted run) had marked FAILED. Without this the final video
+        // is stored but the task stays FAILED and the UI never shows it.
+        const isTerminalPhase = phase === 'VIDEO_COMPOSE';
+        if (isTerminalPhase || body.final_video_key) {
+          await this.env.DB.prepare(`
+            UPDATE tasks SET status = ?, progress = 100, error_msg = NULL,
+              completed_at = COALESCE(completed_at, STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now')),
+              updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now')
+            WHERE id = ? AND status = ?
+          `).bind('COMPLETED', taskId, 'FAILED').run();
+        }
         await this.markPhaseDone(taskId, phase);
         if (message) {
           await this.logTask(taskId, phase, 'INFO', message);
