@@ -66,15 +66,6 @@ CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at);
 CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks(user_id);
 
--- Migration: add cover_image_key column for video cover feature
-ALTER TABLE tasks ADD COLUMN cover_image_key TEXT;
-
--- Migration: add bilibili upload columns for B站 upload feature
-ALTER TABLE tasks ADD COLUMN bilibili_upload BOOLEAN DEFAULT FALSE;
-ALTER TABLE tasks ADD COLUMN bilibili_status TEXT;
-ALTER TABLE tasks ADD COLUMN bilibili_bvid TEXT;
-ALTER TABLE tasks ADD COLUMN bilibili_url TEXT;
-
 -- Bilibili credentials table: stores each user's B站 cookies (encrypted)
 CREATE TABLE IF NOT EXISTS bilibili_credentials (
     user_id TEXT PRIMARY KEY,
