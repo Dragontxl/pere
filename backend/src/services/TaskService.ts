@@ -217,7 +217,9 @@ export class TaskService {
     const result = await this.env.DB.prepare('DELETE FROM tasks WHERE id = ?').bind(id).run();
 
     console.log(`Deleted task ${id} and R2 folder tasks/${id}/`);
-    return (result as any).changes > 0;
+    // D1 的变更行数在 result.meta.changes（旧版本为 result.changes）
+    const changes = (result as any)?.meta?.changes ?? (result as any)?.changes ?? 0;
+    return changes > 0;
   }
 
   /**

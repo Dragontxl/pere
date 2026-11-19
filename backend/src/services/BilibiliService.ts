@@ -45,7 +45,16 @@ export class BilibiliService {
    */
   async saveCredentials(userId: string, cookiesInput: string): Promise<BilibiliCredentialStatus> {
     const cookies = this.parseCookies(cookiesInput);
+    return this.saveCredentialsFromCookies(userId, cookies);
+  }
 
+  /**
+   * 直接以 Cookie 数组保存（供本地扫码助手 / 后端内部调用）
+   */
+  async saveCredentialsFromCookies(
+    userId: string,
+    cookies: BilibiliCookie[],
+  ): Promise<BilibiliCredentialStatus> {
     if (cookies.length === 0) {
       throw new Error('未解析到任何 Cookie，请检查输入格式');
     }
@@ -113,7 +122,9 @@ export class BilibiliService {
     const result = await this.env.DB.prepare(
       'DELETE FROM bilibili_credentials WHERE user_id = ?'
     ).bind(userId).run();
-    return (result as any).changes > 0;
+    // D1 的变更行数在 result.meta.changes（旧版本为 result.changes）
+    const changes = (result as any)?.meta?.changes ?? (result as any)?.changes ?? 0;
+    return changes > 0;
   }
 
   /**
