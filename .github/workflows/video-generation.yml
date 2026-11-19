@@ -423,6 +423,8 @@ jobs:
       enable_subtitle: ${{ steps.params.outputs.enable_subtitle }}
       bgm_key: ${{ steps.params.outputs.bgm_key }}
       language: ${{ steps.params.outputs.language }}
+      title: ${{ steps.params.outputs.title }}
+      orientation: ${{ steps.params.outputs.orientation }}
 
   # ══════════════════════════════════════════════════════════════
   # Job 2: Render — 并行渲染分片（4 个 Ubuntu runner）
