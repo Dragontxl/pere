@@ -40,7 +40,7 @@ FFPROBE_EXE = _resolve_ffprobe()
 
 
 def _probe_clip_params(path: str) -> dict | None:
-    """用 ffprobe 探测片段编码参数（pix_fmt/width/height）
+    """用 ffprobe 探测片段编码参数（pix_fmt/width/height/duration）
 
     仅用于流拷贝一致性预检，探测失败返回 None。
     """
@@ -49,7 +49,7 @@ def _probe_clip_params(path: str) -> dict | None:
     try:
         result = subprocess.run(
             [FFPROBE_EXE, "-v", "error", "-select_streams", "v:0",
-             "-show_entries", "stream=pix_fmt,width,height",
+             "-show_entries", "stream=pix_fmt,width,height:format=duration",
              "-of", "json", path],
             capture_output=True, text=True,
             encoding="utf-8", errors="replace", timeout=10
@@ -57,11 +57,14 @@ def _probe_clip_params(path: str) -> dict | None:
         if result.returncode != 0:
             return None
         import json
-        stream = json.loads(result.stdout).get("streams", [{}])[0]
+        data = json.loads(result.stdout)
+        stream = data.get("streams", [{}])[0]
+        duration = float(data.get("format", {}).get("duration", 0) or 0)
         return {
             "pix_fmt": stream.get("pix_fmt", ""),
             "width": int(stream.get("width", 0) or 0),
             "height": int(stream.get("height", 0) or 0),
+            "duration": duration,
         }
     except Exception:
         return None
