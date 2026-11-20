@@ -1569,13 +1569,14 @@ def _render_single_scene(
             print(f"  ⚠️ 镜头 {scene.scene_id} 段{seg_idx}: 缓存片段损坏，重新渲染")
             final_clip_path.unlink()
 
-    # 选取背景图片：优先用决策的 asset_path，回退到匹配结果第一张
+    # 选取背景图片：同场景拆分多段时，每段从匹配候选中轮换选取不同图片，
+    # 避免所有子段共用同一张画面。候选不足时回退到 decision.asset_path
     # Remotion 片段将以此照片为背景，消除与图片片段的风格割裂
-    bg_image = decision.asset_path
-    if not bg_image:
-        matches = match_results.get(scene.scene_id, [])
-        if matches:
-            bg_image = matches[0]["path"]
+    matches = match_results.get(scene.scene_id, [])
+    if matches:
+        bg_image = matches[seg_idx % len(matches)]["path"]
+    else:
+        bg_image = decision.asset_path
 
     # 路径1：Remotion 渲染
     if decision.implementation == "remotion" and not skip_remotion:
@@ -1591,11 +1592,11 @@ def _render_single_scene(
             return result
 
     # 路径2：图片 + Ken Burns 动效（Remotion 兜底 / 图片场景正常处理）
-    asset_path = decision.asset_path
-    if not asset_path:
-        matches = match_results.get(scene.scene_id, [])
-        if matches:
-            asset_path = matches[0]["path"]
+    # 同场景多段时每段用匹配候选中不同的图片，避免多段共用同一张画面
+    if matches:
+        asset_path = matches[seg_idx % len(matches)]["path"]
+    else:
+        asset_path = decision.asset_path
 
     if asset_path:
         result = _render_and_validate(
