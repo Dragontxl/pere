@@ -1,7 +1,8 @@
 """环节6c-1：视频拼接与音频合并
 
 将各镜头的视频片段按顺序拼接，再合并语音音频。
-支持流拷贝拼接（-c copy，零重编码）和重编码拼接两种模式。
+支持视频流拷贝拼接（-c:v copy 视频零重编码 + -c:a aac 音频重编码）
+和全量重编码拼接两种模式。
 """
 
 import os
@@ -96,16 +97,120 @@ def _normalize_clip_pix_fmt(path: str, target_pix_fmt: str) -> str:
     return tmp_out
 
 
+def _validate_concat_output(output_path: str, expected_durations: list) -> bool:
+    """校验拼接产出的视频文件是否真正可解码（非仅容器元数据正常）
+
+    纯 -c copy 拼接可能产出 ffmpeg 返回 0 但内容损坏的文件：
+    容器元数据（时长/码率）正常，但实际数据流无法解码（尤其音频流）。
+    此函数探测输出文件并验证：
+    1. 视频流和音频流均存在
+    2. 输出时长接近输入片段时长之和（容差 15%）
+    3. 尝试解码末尾帧，确认末尾内容可访问
+
+    Args:
+        output_path: 拼接输出文件路径
+        expected_durations: 各输入片段的时长列表（用于对比）
+
+    Returns:
+        True 表示校验通过；False 表示文件损坏，应回退重编码
+    """
+    if not os.path.exists(output_path) or os.path.getsize(output_path) < 204_800:
+        return False
+
+    # 1. 探测输出文件的流信息与时长
+    if FFPROBE_EXE:
+        try:
+            result = subprocess.run(
+                [FFPROBE_EXE, "-v", "error", "-show_entries",
+                 "format=duration:stream=codec_type,codec_name",
+                 "-of", "json", output_path],
+                capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=15
+            )
+            if result.returncode != 0:
+                return False
+
+            import json
+            data = json.loads(result.stdout)
+            streams = data.get("streams", [])
+            has_video = any(s.get("codec_type") == "video" for s in streams)
+            has_audio = any(s.get("codec_type") == "audio" for s in streams)
+            if not has_video or not has_audio:
+                return False
+
+            out_duration = float(data.get("format", {}).get("duration", "0"))
+            expected = sum(expected_durations) if expected_durations else out_duration
+            if expected > 0.1 and abs(out_duration - expected) / expected > 0.15:
+                return False
+        except Exception:
+            return False
+    else:
+        # 无 ffprobe：用 ffmpeg 兜底探测
+        try:
+            result = subprocess.run(
+                [FFMPEG_EXE, "-hide_banner", "-i", output_path],
+                capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=30
+            )
+            stderr = result.stderr or ""
+            if "Video:" not in stderr or "Audio:" not in stderr:
+                return False
+            m = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", stderr)
+            if not m:
+                return False
+            out_duration = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
+            expected = sum(expected_durations) if expected_durations else out_duration
+            if expected > 0.1 and abs(out_duration - expected) / expected > 0.15:
+                return False
+        except Exception:
+            return False
+
+    # 2. 尝试解码末尾帧，确认末尾内容可访问（关键：片尾在末尾，损坏时无法读取）
+    try:
+        probe_frame = output_path + ".validate.jpg"
+        r = subprocess.run(
+            [FFMPEG_EXE, "-y", "-ss", "0", "-i", output_path,
+             "-f", "image2", "-frames:v", "1", "-q:v", "5", probe_frame],
+            capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=30
+        )
+        ok_start = os.path.exists(probe_frame) and os.path.getsize(probe_frame) > 0
+        # 清理探针帧
+        if os.path.exists(probe_frame):
+            os.unlink(probe_frame)
+
+        # 解码末尾帧（取输出时长 - 1 秒）
+        probe_frame2 = output_path + ".validate_end.jpg"
+        seek_t = out_duration - 1 if out_duration > 2 else out_duration // 2
+        r2 = subprocess.run(
+            [FFMPEG_EXE, "-y", "-ss", str(seek_t), "-i", output_path,
+             "-f", "image2", "-frames:v", "1", "-q:v", "5", probe_frame2],
+            capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=30
+        )
+        ok_end = os.path.exists(probe_frame2) and os.path.getsize(probe_frame2) > 0
+        if os.path.exists(probe_frame2):
+            os.unlink(probe_frame2)
+
+        return ok_start and ok_end
+    except Exception:
+        return False
+
+
 def merge_clips_stream_copy(clip_paths: list, output_path: str) -> str:
-    """流拷贝拼接视频片段（零重编码，速度极快）
+    """视频流拷贝拼接（视频零重编码 + 音频重编码，速度极快）
 
-    使用 ffmpeg concat demuxer + -c copy，直接将各片段的 H.264 码流
-    拼接成完整视频，不解码、不重编码。要求所有片段编码参数一致
-    （同 codec、分辨率、fps、pixel_format、profile、level）。
+    使用 ffmpeg concat demuxer，视频流 -c:v copy 直接拼接 H.264 码流
+    （不解码、不重编码），音频流 -c:a aac 统一重编码为兼容的 AAC。
 
-    拼接前会逐片探测编码参数；pix_fmt 不一致的片段会先归一化到多数
-    片段使用的格式（默认 yuv420p），从而保证流拷贝始终可用，避免
-    回退重编码。分辨率不一致时无法简单归一化，则回退重编码。
+    纯 -c copy 盲拼在各片段音频编码参数（采样率/声道/编码器）不一致时
+    会产出损坏文件：容器元数据正常但实际数据流无法解码，播放器中途
+    中断，末尾片段（如片尾）不可见。改为视频流拷贝 + 音频重编码，
+    既保留视频零重编码的快速拼接，又确保音频兼容性。
+
+    拼接前会逐片探测编码参数；pix_fmt 不一致的片段会先归一化到目标
+    格式（yuv420p）。拼接后校验输出文件可解码性，损坏则回退重编码。
+    分辨率不一致时无法简单归一化，则回退重编码。
 
     Args:
         clip_paths: 视频片段路径列表（按顺序）
@@ -174,13 +279,18 @@ def merge_clips_stream_copy(clip_paths: list, output_path: str) -> str:
         list_file = f.name
 
     try:
+        # 视频流拷贝（零重编码），音频重编码为 AAC（128k）
+        # 不同片段的 AAC 音频参数（采样率/声道/编码器）可能不一致，
+        # 纯 -c copy 盲拼会导致音频流损坏（播放器中途中断、末尾片段不可见）。
+        # 视频流 -c:v copy 保持无损快速拼接，仅音频重编码确保兼容性。
         cmd = [
             FFMPEG_EXE,
             "-y",
             "-f", "concat",
             "-safe", "0",
             "-i", list_file,
-            "-c", "copy",
+            "-c:v", "copy",
+            "-c:a", "aac", "-b:a", "128k",
             "-movflags", "+faststart",
             output_path,
         ]
@@ -193,8 +303,19 @@ def merge_clips_stream_copy(clip_paths: list, output_path: str) -> str:
         )
         if result.returncode != 0 or not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
             raise RuntimeError(f"流拷贝拼接失败: {result.stderr.strip()}")
+
+        # 拼接后校验：探测输出文件，确认视频流和音频流均可正常解码
+        # 纯 -c copy 拼接可能产出容器正常但内容损坏的文件（ffmpeg 返回 0 但数据无效）
+        validated = _validate_concat_output(output_path, [p["duration"] for p in params_list])
+        if not validated:
+            raise RuntimeError("流拷贝拼接产出损坏文件，回退重编码拼接")
     except subprocess.TimeoutExpired:
         raise RuntimeError("流拷贝拼接超时")
+    except RuntimeError:
+        # 校验失败或拼接失败：清理已产出的损坏文件，由调用方回退重编码
+        if os.path.exists(output_path):
+            os.unlink(output_path)
+        raise
     except Exception as e:
         raise RuntimeError(f"流拷贝拼接异常: {e}")
     finally:
@@ -285,9 +406,9 @@ def _probe_clip_info(path: str) -> dict | None:
 def merge_clips(clip_paths: list, output_path: str, preset: str = "veryfast") -> str:
     """拼接视频片段
 
-    优先使用流拷贝拼接（-c copy，零重编码，秒级完成），
-    如果片段编码参数不兼容或存在损坏片段，则回退到
-    ffmpeg concat demuxer 重编码（流式处理，不会 OOM）。
+    优先使用视频流拷贝拼接（-c:v copy 视频零重编码 + -c:a aac 音频重编码，
+    秒级完成），如果片段编码参数不兼容或存在损坏片段，则回退到
+    ffmpeg concat demuxer 全量重编码（流式处理，不会 OOM）。
 
     损坏片段自动跳过，不中断整体拼接。
 
@@ -324,12 +445,12 @@ def merge_clips(clip_paths: list, output_path: str, preset: str = "veryfast") ->
     if skipped:
         print(f"  ⚠️ 跳过 {len(skipped)} 个损坏片段，拼接 {len(valid_clips)} 个有效片段")
 
-    # 先尝试流拷贝拼接（零重编码，速度极快）
+    # 先尝试视频流拷贝拼接（视频零重编码 + 音频重编码，速度极快）
     try:
-        print(f"  ⚡ 尝试流拷贝拼接（零重编码）...")
+        print(f"  ⚡ 尝试视频流拷贝拼接（视频零重编码 + 音频重编码）...")
         merge_clips_stream_copy(valid_clips, output_path)
         file_size = os.path.getsize(output_path) / (1024 * 1024)
-        print(f"  ✅ 流拷贝拼接完成（{file_size:.1f} MB，未重编码）")
+        print(f"  ✅ 流拷贝拼接完成（{file_size:.1f} MB，视频未重编码）")
         return output_path
     except Exception as e:
         print(f"  ⚠️ 流拷贝拼接失败，回退到 ffmpeg 重编码拼接: {e}")
