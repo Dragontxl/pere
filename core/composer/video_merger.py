@@ -481,6 +481,7 @@ def merge_clips(clip_paths: list, output_path: str, preset: str = "veryfast") ->
             "-preset", preset,
             "-c:a", "aac",
             "-threads", "4",
+            "-shortest",
             "-movflags", "+faststart",
             output_path,
         ]
@@ -493,6 +494,13 @@ def merge_clips(clip_paths: list, output_path: str, preset: str = "veryfast") ->
         )
         if result.returncode != 0 or not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
             raise RuntimeError(f"ffmpeg 重编码拼接失败: {result.stderr.strip()}")
+
+        # 重编码后校验：-shortest 已截断时长至实际内容长度，
+        # 主要确认末尾帧可访问。不传 clip_durations 做时长对比，
+        # 因源片段元数据时长可能不准确（正是本次问题的根因）。
+        validated = _validate_concat_output(output_path, [])
+        if not validated:
+            raise RuntimeError("ffmpeg 重编码拼接产出损坏文件（末尾帧不可访问）")
     except subprocess.TimeoutExpired:
         raise RuntimeError("ffmpeg 重编码拼接超时（10分钟）")
     except Exception as e:
