@@ -5,11 +5,14 @@
  * 叠加玻璃态标题 + 流程步骤卡片。
  * steps 由 Python 端从解说文本切分而来；不足 2 条时只显示标题卡片，
  * 不再出现占位的「步骤一/二/三」。
+ *
+ * 动效：标题淡入缩放、步骤卡片弹性入场、连接线生长、首尾软转场。
  * 参数通过 props.json 传入。
  */
 
 const React = require('react');
 const { AbsoluteFill, useCurrentFrame, useVideoConfig, staticFile } = require('remotion');
+const { easeOut, fadeOpacity, springScale, easeInOut } = require('./anim');
 
 // 根据文本长度自适应字号
 const fitFont = (len, base) => {
@@ -22,7 +25,7 @@ const fitFont = (len, base) => {
 
 const DiagramScene = (props) => {
     const frame = useCurrentFrame();
-    const { fps, width, height } = useVideoConfig();
+    const { fps, width } = useVideoConfig();
     const { text, steps = [], duration, background_image } = props;
 
     const headline = (text || '').trim();
@@ -31,20 +34,28 @@ const DiagramScene = (props) => {
 
     const bgUrl = background_image ? staticFile(background_image) : null;
 
-    // 背景 Ken Burns 缩放
     const totalFrames = Math.max(1, (duration || 5) * fps);
     const bgProgress = Math.min(frame / totalFrames, 1);
     const bgScale = 1 + bgProgress * 0.08;
 
-    const stepDuration = fps * 1.3;
-    const progress = Math.min(frame / (stepDuration * Math.max(stepList.length, 1)), 1);
+    // 首尾软转场
+    const globalOpacity = fadeOpacity(frame, totalFrames, fps * 0.4, fps * 0.4);
 
     const titleFont = fitFont(headline.length, hasSteps ? 56 : 96);
+
+    // 标题卡片弹性入场
+    const titleScale = springScale(frame, 0, fps);
+    const titleOpacity = easeOut(frame, 0, fps * 0.4);
+
+    // 步骤逐条入场
+    const stepItemGap = fps * 0.5;
+    const stepStart = fps * 1.0;
 
     return (
         <AbsoluteFill style={{
             overflow: 'hidden',
             fontFamily: "'Microsoft YaHei', 'PingFang SC', Arial, sans-serif",
+            opacity: globalOpacity,
         }}>
             {/* 背景照片 + Ken Burns 缩放 */}
             <div style={{
@@ -75,8 +86,9 @@ const DiagramScene = (props) => {
                         border: '1px solid rgba(255, 255, 255, 0.12)',
                         borderRadius: '20px',
                         padding: '36px 48px',
-                        boxShadow: '0 10px 40px rgba(0, 0, 0, 0.4)',
-                        opacity: Math.min(frame / (fps * 0.5), 1),
+                        boxShadow: '0 14px 48px rgba(0, 0, 0, 0.45)',
+                        opacity: titleOpacity,
+                        transform: `scale(${titleScale})`,
                     }}>
                         <div style={{
                             fontSize: titleFont,
@@ -100,17 +112,19 @@ const DiagramScene = (props) => {
                             marginTop: 36,
                         }}>
                             {stepList.map((step, i) => {
-                                const stepProgress = Math.max(0, Math.min(progress * stepList.length - i, 1));
-                                if (stepProgress <= 0) return null;
+                                const stepFrame = stepStart + i * stepItemGap;
+                                const stepScale = springScale(frame, stepFrame, fps);
+                                const stepOpacity = easeOut(frame, stepFrame, stepFrame + fps * 0.3);
 
                                 return (
                                     <React.Fragment key={i}>
-                                        {/* 连接线 */}
-                                        {i < stepList.length - 1 && stepProgress > 0.5 && (
+                                        {/* 连接线（生长动画） */}
+                                        {i < stepList.length - 1 && (
                                             <div style={{
                                                 width: 2,
-                                                height: 28 * Math.min((stepProgress - 0.5) / 0.5, 1),
+                                                height: `${28 * easeInOut(frame, stepFrame + fps * 0.3, stepFrame + fps * 0.6)}px`,
                                                 backgroundColor: 'rgba(255, 255, 255, 0.22)',
+                                                margin: '6px 0',
                                             }} />
                                         )}
 
@@ -118,13 +132,13 @@ const DiagramScene = (props) => {
                                         <div style={{
                                             display: 'flex',
                                             alignItems: 'center',
-                                            opacity: stepProgress,
-                                            transform: `scale(${0.88 + stepProgress * 0.12})`,
+                                            opacity: stepOpacity,
+                                            transform: `scale(${stepScale})`,
                                             background: 'rgba(24, 26, 46, 0.78)',
                                             border: '1px solid rgba(255, 255, 255, 0.12)',
                                             borderRadius: '14px',
                                             padding: '14px 26px',
-                                            boxShadow: '0 4px 22px rgba(0, 0, 0, 0.32)',
+                                            boxShadow: '0 6px 24px rgba(0, 0, 0, 0.35)',
                                             minWidth: width * 0.4,
                                         }}>
                                             <div style={{
@@ -140,6 +154,7 @@ const DiagramScene = (props) => {
                                                 fontWeight: 'bold',
                                                 flexShrink: 0,
                                                 boxShadow: '0 2px 10px rgba(0, 0, 0, 0.3)',
+                                                transform: `scale(${springScale(frame, stepFrame, fps)})`,
                                             }}>
                                                 {i + 1}
                                             </div>
@@ -165,4 +180,5 @@ const DiagramScene = (props) => {
     );
 };
 
-export default DiagramScene;
+module.exports = DiagramScene;
+module.exports.default = DiagramScene;
