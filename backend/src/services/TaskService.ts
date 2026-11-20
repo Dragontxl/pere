@@ -956,12 +956,17 @@ export class TaskService {
         // is stored but the task stays FAILED and the UI never shows it.
         const isTerminalPhase = phase === 'VIDEO_COMPOSE';
         if (isTerminalPhase || body.final_video_key) {
+          // A terminal-phase success callback (or any callback carrying the final
+          // video) means the pipeline actually finished — set the task COMPLETED
+          // with progress 100 regardless of whether it was FAILED, RUNNING, or
+          // still in progress. markPhaseDone below would cap progress at 99%,
+          // so this must run first and take effect.
           await this.env.DB.prepare(`
             UPDATE tasks SET status = ?, progress = 100, error_msg = NULL,
               completed_at = COALESCE(completed_at, STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now')),
               updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now')
-            WHERE id = ? AND status = ?
-          `).bind('COMPLETED', taskId, 'FAILED').run();
+            WHERE id = ? AND status NOT IN ('COMPLETED', 'CANCELLED')
+          `).bind('COMPLETED', taskId).run();
           // Video is ready — auto-upload to Bilibili if the user opted in
           await this.maybeAutoUploadBilibili(taskId);
         }
