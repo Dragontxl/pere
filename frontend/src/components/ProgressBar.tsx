@@ -72,8 +72,8 @@ export default function ProgressBar({
   const details = parsePhaseDetails(phaseDetails);
 
   // 视频合成分为「渲染片段」（4 个 runner 并行，慢）和「拼接成片」（快）两步。
-  // 后端在 phase_details.VIDEO_COMPOSE 中记录 sub_phase，据此把该阶段展开为两格。
-  // 老任务没有 sub_phase（升级前已进入合成），仍按单个「视频合成」展示。
+  // 后端在 phase_details.VIDEO_COMPOSE 中记录 sub_phase，据此判断当前进行到哪一步；
+  // 任务尚未进入合成阶段时没有 sub_phase，两步都显示为等待中。
   const compose = details['VIDEO_COMPOSE'];
   const activeSubPhase: ComposeSubPhase | null =
     compose?.sub_phase === 'RENDER' || compose?.sub_phase === 'ASSEMBLY'
@@ -82,7 +82,9 @@ export default function ProgressBar({
 
   const steps: Step[] = [];
   for (const phase of phases) {
-    if (phase.key === 'VIDEO_COMPOSE' && activeSubPhase) {
+    if (phase.key === 'VIDEO_COMPOSE') {
+      // 固定展开为两个子步骤：即使还没跑到合成阶段也先展示出来，
+      // 这样阶段总数始终是 8，用户能预期后续流程。
       steps.push({
         key: 'VIDEO_COMPOSE:RENDER',
         label: '视频渲染',
@@ -147,6 +149,7 @@ export default function ProgressBar({
             isCompleted || (phaseIndex >= 0 && phaseIndex < currentPhaseIndex);
 
           let isDone = phaseDone;
+          let isCurrent = false;
           let processed = 0;
           let total = 0;
           let failed = 0;
@@ -162,18 +165,22 @@ export default function ProgressBar({
             processed = render?.processed ?? detail?.processed ?? 0;
             total = render?.total ?? detail?.total ?? 0;
             failed = detail?.failed ?? 0;
+            isCurrent = isCurrentPhase && !isDone;
           } else if (step.subPhase === 'ASSEMBLY') {
             const assembly = compose?.assembly;
             isDone = isCompleted || !!assembly?.completed_at || !!assembly?.duration_ms;
             processed = assembly?.processed ?? 0;
             total = assembly?.total ?? 0;
+            // 只有后端确认 sub_phase = ASSEMBLY 后才视为当前步骤；
+            // 渲染进行中或无 sub_phase 的任务保持等待中。
+            isCurrent = isCurrentPhase && !isDone && activeSubPhase === 'ASSEMBLY';
           } else {
             processed = detail?.processed ?? 0;
             total = detail?.total ?? 0;
             failed = detail?.failed ?? 0;
+            isCurrent = isCurrentPhase && !isDone;
           }
 
-          const isCurrent = isCurrentPhase && !isDone;
           const isPending = !isDone && !isCurrent;
 
           // Compute per-step progress percentage
