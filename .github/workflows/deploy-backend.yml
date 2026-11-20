@@ -54,7 +54,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           set +e
-          while IFS= read -r stmt; do
+          while IFS= read -r stmt || [ -n "$stmt" ]; do
             stmt="$(echo "$stmt" | sed 's/[[:space:]]*$//')"
             [ -z "$stmt" ] && continue
             case "$stmt" in --*) continue ;; esac
