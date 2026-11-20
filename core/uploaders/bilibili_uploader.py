@@ -817,11 +817,16 @@ class BilibiliUploader:
         print("  ⚠️ 未检测到 URL 跳转，但未发现错误提示，继续轮询 BV 号")
 
     def _check_submit_errors(self):
-        """检测提交后的页面错误提示（toast / 表单验证），返回错误信息或空字符串"""
+        """检测提交后的页面错误提示（toast / 表单验证），返回错误信息或空字符串
+
+        注意：只检测真正的错误元素，不匹配信息性提示（如"成为UP主的第X天"等）。
+        通过错误类名 + 错误关键词文本双重判定，避免误报。
+        """
         try:
             info = self.page.evaluate("""() => {
-                // 检测 toast 错误提示
-                var toastSelectors = [
+                var errors = [];
+                // 1. 检测错误专用 toast/提示元素（类名明确包含 error）
+                var errorSelectors = [
                     '[class*="toast-error"]',
                     '[class*="bcc-toast-error"]',
                     '.bcc-message-error',
@@ -829,9 +834,11 @@ class BilibiliUploader:
                     '[class*="error-text"]',
                     '[class*="form-error"]',
                     '[class*="tips-error"]',
+                    '[class*="tips--error"]',
+                    '[class*="error-tips"]',
+                    '.bcc-tips--error',
                 ];
-                var errors = [];
-                for (var sel of toastSelectors) {
+                for (var sel of errorSelectors) {
                     var els = document.querySelectorAll(sel);
                     for (var el of els) {
                         if (el.offsetParent !== null && el.offsetWidth > 0) {
@@ -840,22 +847,23 @@ class BilibiliUploader:
                         }
                     }
                 }
-                // 检测红色提示文本
-                var tipSelectors = [
-                    '[style*="color: red"]',
-                    '[style*="color:#f00"]',
-                    '[style*="color: #f00"]',
-                    '.bcc-tips--error',
-                    '[class*="tips"]',
-                ];
-                for (var sel of tipSelectors) {
-                    var els = document.querySelectorAll(sel);
-                    for (var el of els) {
-                        if (el.offsetParent !== null && el.offsetWidth > 0) {
-                            var t = (el.textContent || '').trim();
-                            if (t && t.length > 0 && t.length < 100) {
-                                errors.push(sel + ': ' + t.substring(0, 100));
-                            }
+                // 2. 检测错误关键词文本（在所有可见元素中搜索错误关键词）
+                // 错误关键词：失败、错误、请填写、不能为空、请选择、不符合、违规、不合法、未通过、已存在
+                var errorKeywords = ['上传失败', '投稿失败', '提交失败', '操作失败', '请求失败',
+                    '错误', '请填写', '不能为空', '请选择', '不符合', '违规', '不合法',
+                    '未通过', '已存在', '格式错误', '校验失败'];
+                // 只检查 toast/message 类容器内的文本，避免匹配到无关页面文本
+                var messageContainers = document.querySelectorAll(
+                    '[class*="toast"], [class*="message"], [class*="dialog"], [class*="alert"]'
+                );
+                for (var c of messageContainers) {
+                    if (c.offsetParent === null || c.offsetWidth === 0) continue;
+                    var t = (c.textContent || '').trim();
+                    if (!t || t.length > 200) continue;
+                    for (var kw of errorKeywords) {
+                        if (t.indexOf(kw) !== -1) {
+                            errors.push('msg: ' + t.substring(0, 100));
+                            break;
                         }
                     }
                 }
@@ -872,11 +880,12 @@ class BilibiliUploader:
         try:
             errors = self.page.evaluate("""() => {
                 var errors = [];
-                // 检查必填字段是否有红框
+                // 检查必填字段是否有红框（只匹配错误专用类名，避免误匹配）
                 var requiredSelectors = [
                     'input.bcc-input-inner--error',
                     '.bcc-tips--error',
-                    '[class*="error"] input',
+                    '[class*="error-input"]',
+                    '[class*="error-tips"]',
                 ];
                 for (var sel of requiredSelectors) {
                     var els = document.querySelectorAll(sel);
