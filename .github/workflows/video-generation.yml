@@ -118,6 +118,7 @@ jobs:
           python-version: "3.11"
 
       - name: 设置 Node.js
+        if: ${{ env.RERENDER_CLIPS != '' }}
         uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -131,6 +132,7 @@ jobs:
           retention-days: 14
 
       - name: 缓存 npm 依赖
+        if: ${{ env.RERENDER_CLIPS != '' }}
         uses: actions/cache@v4
         with:
           path: remotion/node_modules
@@ -153,9 +155,14 @@ jobs:
 
       - name: 安装 Python 依赖
         run: |
+          # 先装 CPU 版 torch：默认 PyPI 的 torch 是 CUDA 版，会额外拉数 GB 的
+          # nvidia-* 运行时，CI 无 GPU 完全用不上。装好 CPU 版后，
+          # 下面 pip install -r requirements.txt 会认为 torch 已满足而跳过
+          pip install torch --index-url https://download.pytorch.org/whl/cpu || true
           pip install -r requirements.txt
 
       - name: 安装 Node.js 依赖
+        if: ${{ env.RERENDER_CLIPS != '' }}
         run: |
           cd remotion && npm install
 
@@ -444,6 +451,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
       - name: 安装系统依赖并打包
         run: |
           sudo apt-get update -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Retries=5
@@ -460,6 +475,20 @@ jobs:
         with:
           name: apt-packages
           path: apt-packages.tar.gz
+          retention-days: 1
+
+      # 预下载 render/assembly 所需的轻量依赖 wheels，下游离线安装
+      - name: 预下载 core 依赖 wheels
+        run: |
+          mkdir -p /tmp/py-wheels
+          pip download -r requirements-core.txt -d /tmp/py-wheels
+          tar czf py-wheels-core.tar.gz -C /tmp/py-wheels .
+          echo "core wheels packaged: $(ls /tmp/py-wheels | wc -l) files, $(du -h py-wheels-core.tar.gz | cut -f1)"
+      - name: 上传 wheels artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: py-wheels-core
+          path: py-wheels-core.tar.gz
           retention-days: 1
 
   # ══════════════════════════════════════════════════════════════
@@ -521,9 +550,19 @@ jobs:
           sudo dpkg -i *.deb 2>/dev/null || sudo apt-get install -f -y -o Acquire::http::Timeout=30 -o Acquire::Retries=3
           sudo rm -rf /var/lib/apt/lists/*
 
-      - name: 安装 Python 依赖
+      - name: 下载 core 依赖 wheels
+        uses: actions/download-artifact@v4
+        with:
+          name: py-wheels-core
+          path: /tmp/py-wheels
+
+      - name: 安装 Python 依赖（离线优先）
         run: |
-          pip install -r requirements.txt
+          # 只安装 render 需要的轻量依赖（不含 torch/transformers）
+          # 优先从 setup-deps 预下载的 wheels 离线安装，失败则回退在线
+          tar xzf /tmp/py-wheels/py-wheels-core.tar.gz -C /tmp/py-wheels
+          pip install --no-index --find-links /tmp/py-wheels -r requirements-core.txt \
+            || pip install -r requirements-core.txt
 
       - name: 安装 Node.js 依赖
         run: |
@@ -622,11 +661,6 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: 设置 Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
       - name: 缓存 pip 依赖
         uses: actions/cache@v4
         with:
@@ -648,9 +682,19 @@ jobs:
           sudo dpkg -i *.deb 2>/dev/null || sudo apt-get install -f -y -o Acquire::http::Timeout=30 -o Acquire::Retries=3
           sudo rm -rf /var/lib/apt/lists/*
 
-      - name: 安装 Python 依赖
+      - name: 下载 core 依赖 wheels
+        uses: actions/download-artifact@v4
+        with:
+          name: py-wheels-core
+          path: /tmp/py-wheels
+
+      - name: 安装 Python 依赖（离线优先）
         run: |
-          pip install -r requirements.txt
+          # assembly 只需轻量依赖（不含 torch/transformers）
+          # 优先从 setup-deps 预下载的 wheels 离线安装，失败则回退在线
+          tar xzf /tmp/py-wheels/py-wheels-core.tar.gz -C /tmp/py-wheels
+          pip install --no-index --find-links /tmp/py-wheels -r requirements-core.txt \
+            || pip install -r requirements-core.txt
 
       - name: 配置 ffmpeg 路径
         run: |
