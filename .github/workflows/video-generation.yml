@@ -435,11 +435,39 @@ jobs:
       orientation: ${{ steps.params.outputs.orientation }}
 
   # ══════════════════════════════════════════════════════════════
+  # Job 1b: Setup Deps — 集中安装系统依赖，打包上传 artifact
+  # 4 个 render job 并发跑 apt-get 会争抢 Ubuntu 镜像带宽，
+  # 导致部分 job 安装耗时 20s~800s 不等。抽离为单一 job，
+  # render job 通过 artifact 离线安装，彻底消除并发争抢。
+  # ══════════════════════════════════════════════════════════════
+  setup-deps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: 安装系统依赖并打包
+        run: |
+          sudo apt-get update -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Retries=5
+          sudo apt-get install -y --no-install-recommends \
+            -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Retries=5 \
+            imagemagick fonts-noto-cjk ffmpeg
+          # 打包 .deb 文件供 render job 离线安装（无需访问镜像源）
+          mkdir -p /tmp/apt-packages
+          cp /var/cache/apt/archives/*.deb /tmp/apt-packages/ 2>/dev/null || true
+          tar czf apt-packages.tar.gz -C /tmp/apt-packages .
+          echo "apt packages packaged: $(ls /tmp/apt-packages/*.deb 2>/dev/null | wc -l) deb files, $(du -h apt-packages.tar.gz | cut -f1)"
+      - name: 上传 apt 包 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: apt-packages
+          path: apt-packages.tar.gz
+          retention-days: 1
+
+  # ══════════════════════════════════════════════════════════════
   # Job 2: Render — 并行渲染分片（4 个 Ubuntu runner）
   # 每个 job 下载 R2 产物，渲染分配的片段，上传回 R2
   # ══════════════════════════════════════════════════════════════
   render:
-    needs: pipeline
+    needs: [pipeline, setup-deps]
     # 重渲染模式不需要渲染 job
     if: ${{ needs.pipeline.outputs.rerender_clips == '' }}
     runs-on: ubuntu-latest
@@ -479,17 +507,18 @@ jobs:
           restore-keys: npm-${{ runner.os }}-
           retention-days: 14
 
-      - name: 缓存 apt 包
-        uses: actions/cache@v4
+      - name: 下载 apt 包并离线安装
+        uses: actions/download-artifact@v4
         with:
-          path: /var/cache/apt/archives
-          key: apt-${{ runner.os }}-v3
-          retention-days: 7
-
-      - name: 安装系统依赖
+          name: apt-packages
+          path: /tmp/apt-packages
+      - name: 离线安装系统依赖
         run: |
-          sudo apt-get update -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 -o Acquire::Retries=3
-          sudo apt-get install -y --no-install-recommends -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 -o Acquire::Retries=3 imagemagick fonts-noto-cjk ffmpeg
+          # 从 artifact 中的 .deb 文件离线安装，无需访问 Ubuntu 镜像源
+          # 消除 4 个 render job 并发 apt-get 争抢镜像带宽的问题
+          cd /tmp/apt-packages
+          tar xzf apt-packages.tar.gz
+          sudo dpkg -i *.deb 2>/dev/null || sudo apt-get install -f -y -o Acquire::http::Timeout=30 -o Acquire::Retries=3
           sudo rm -rf /var/lib/apt/lists/*
 
       - name: 安装 Python 依赖
