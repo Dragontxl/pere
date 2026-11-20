@@ -141,7 +141,7 @@ class BilibiliUploader:
     UPLOAD_URL = "https://member.bilibili.com/platform/upload/video/frame?page_from=creative_home_top_upload"
     SPACE_URL_TEMPLATE = "https://space.bilibili.com/{uid}/video"
 
-    def __init__(self, video_path, cover_path, cookies_path, title, description, tags, headless=True):
+    def __init__(self, video_path, cover_path, cookies_path, title, description, tags, headless=True, work_dir=None):
         self.video_path = video_path
         self.cover_path = cover_path
         self.cookies_path = cookies_path
@@ -149,6 +149,7 @@ class BilibiliUploader:
         self.description = description
         self.tags = tags
         self.headless = headless
+        self.work_dir = work_dir or "./bilibili_work"
         self.playwright = None
         self.browser = None
         self.context = None
@@ -176,6 +177,17 @@ class BilibiliUploader:
             return bvid, url
         finally:
             self._close()
+
+    def _take_screenshot(self, name):
+        """保存截图到工作目录（用于调试）"""
+        try:
+            import os
+            os.makedirs(self.work_dir, exist_ok=True)
+            path = os.path.join(self.work_dir, f"{name}.png")
+            self.page.screenshot(path=path, full_page=False)
+            print(f"  📸 截图已保存: {path}")
+        except Exception as e:
+            print(f"  ⚠️ 截图失败: {e}")
 
     def _launch(self):
         """启动无头浏览器"""
@@ -745,7 +757,15 @@ class BilibiliUploader:
             print("  ⚠️ 未找到分区选择器，跳过")
 
     def _submit(self):
-        """点击投稿按钮提交"""
+        """点击投稿按钮提交
+
+        参考项目对齐：
+        1. 投稿按钮用文本搜索兜底（不只是 CSS 选择器）
+        2. 点击后等 5 秒 + 截图
+        3. 确认弹窗重试 3 次（弹窗可能延迟出现）
+        4. 再等 5 秒 + 截图
+        5. 未检测到 URL 跳转不报错，仅记录日志后继续轮询 BV 号
+        """
         print("  📤 提交投稿...")
         # 先关闭可能存在的弹窗（调用两次，可能有多层弹窗）
         print("  🔍 检查并关闭已有弹窗...")
@@ -754,20 +774,51 @@ class BilibiliUploader:
         self._handle_confirm_dialog()
         time.sleep(1)
 
-        # 找投稿按钮
+        # 找投稿按钮：CSS 选择器 → 文本搜索兜底（与参考项目一致）
+        submit_btn = None
         submit_selectors = [
             'button:has-text("立即投稿")',
             'button:has-text("投稿")',
             '.submit-btn',
+            '[class*="submit-btn"]',
             '[class*="submit"]',
         ]
-        submit_btn = None
         for sel in submit_selectors:
             submit_btn = self.page.query_selector(sel)
             if submit_btn:
                 break
 
         if not submit_btn:
+            # 文本搜索兜底：找任意可见元素包含"立即投稿"文本
+            btn_info = self.page.evaluate("""() => {
+                var els = document.querySelectorAll('span, button, a, div, p');
+                for (var el of els) {
+                    var t = (el.textContent || '').trim();
+                    if (t.indexOf('立即投稿') !== -1 && el.offsetParent !== null && el.offsetWidth > 0) {
+                        el.scrollIntoView({block: 'center'});
+                        var rect = el.getBoundingClientRect();
+                        return JSON.stringify({
+                            status: 'FOUND',
+                            x: rect.x + rect.width / 2,
+                            y: rect.y + rect.height / 2,
+                            text: t.substring(0, 30)
+                        });
+                    }
+                }
+                return JSON.stringify({status: 'NOT_FOUND'});
+            }""")
+            import json as _json
+            btn_info = _json.loads(btn_info)
+            if btn_info.get("status") == "FOUND":
+                self.page.mouse.move(btn_info["x"], btn_info["y"])
+                time.sleep(0.2)
+                self.page.mouse.click(btn_info["x"], btn_info["y"])
+                print(f"  🖱️ 投稿按钮已点击（文本搜索: {btn_info['text']}）")
+                time.sleep(5)
+                self._take_screenshot("after_submit")
+                # 处理二次确认弹窗
+                self._retry_handle_dialog(3)
+                return
             raise RuntimeError("未找到投稿按钮")
 
         # 检查是否 disabled
@@ -791,30 +842,102 @@ class BilibiliUploader:
         else:
             submit_btn.click()
 
-        time.sleep(3)
-        # 处理二次确认弹窗
-        self._handle_confirm_dialog()
+        # 等 5 秒让确认弹窗出现
+        time.sleep(5)
+        self._take_screenshot("after_submit")
 
-        # 等待 URL 跳转
-        deadline = time.time() + 30
-        while time.time() < deadline:
-            url = self.page.url
-            if "/video/manage" in url or "/platform/edit" in url:
-                print("  ✅ 投稿已提交")
-                return
-            # 检测错误提示（toast / 表单验证）
-            error_msg = self._check_submit_errors()
-            if error_msg:
-                raise RuntimeError(f"投稿提交失败: {error_msg}")
-            time.sleep(2)
+        # 处理二次确认弹窗（重试 3 次，弹窗可能延迟出现）
+        print("  🔍 处理确认弹窗...")
+        self._retry_handle_dialog(3)
 
-        # 未检测到跳转，再检查是否有错误
+        # 再等 5 秒看是否跳转
+        time.sleep(5)
+        self._take_screenshot("after_confirm")
+
+        # 检查 URL 跳转
+        url = self.page.url
+        if "/video/manage" in url or "/platform/edit" in url:
+            print(f"  ✅ 投稿已提交，跳转到: {url}")
+            return
+
+        # 检查是否有错误提示
         error_msg = self._check_submit_errors()
         if error_msg:
-            raise RuntimeError(f"投稿提交失败（未跳转）: {error_msg}")
+            self._take_screenshot("submit_error")
+            raise RuntimeError(f"投稿提交失败: {error_msg}")
 
         # 无跳转也无错误，可能投稿在后台处理中，继续轮询 BV 号
-        print("  ⚠️ 未检测到 URL 跳转，但未发现错误提示，继续轮询 BV 号")
+        print(f"  ⚠️ 未检测到 URL 跳转（当前: {url}），但未发现错误提示，继续轮询 BV 号")
+
+    def _retry_handle_dialog(self, max_retries):
+        """重试处理确认弹窗（弹窗可能延迟出现）"""
+        for attempt in range(max_retries):
+            info = self.page.evaluate("""() => {
+                var dialogs = document.querySelectorAll('.bcc-dialog, [class*="dialog-body"], [class*="modal-body"]');
+                var dialog = null;
+                for (var d of dialogs) {
+                    if (d.offsetParent !== null) { dialog = d; break; }
+                }
+                if (!dialog) {
+                    var wraps = document.querySelectorAll('.bcc-dialog__wrap, [class*="dialog-wrap"]');
+                    for (var w of wraps) {
+                        if (w.offsetParent !== null || getComputedStyle(w).display !== 'none') { dialog = w; break; }
+                    }
+                }
+                if (!dialog) return JSON.stringify({status: 'NO_DIALOG'});
+                var btns = dialog.querySelectorAll('button, .bcc-button, [class*="btn"], span[class*="submit"], a');
+                var visibleBtns = [];
+                for (var b of btns) {
+                    if (b.offsetParent !== null && b.offsetWidth > 0 && b.offsetHeight > 0) {
+                        visibleBtns.push(b);
+                    }
+                }
+                var closeKeywords = ['暂不设置', '稍后再说', '以后再说', '我知道了', '知道了', '关闭', '取消', '跳过', '暂不', '不用了'];
+                var confirmKeywords = ['确认', '确定', '是', '投稿', '同意', '继续', '好的', '完成', '去试试', '立即体验'];
+                var targetBtn = null;
+                for (var b of visibleBtns) {
+                    var t = (b.textContent || '').trim();
+                    for (var kw of closeKeywords) {
+                        if (t.indexOf(kw) !== -1) { targetBtn = b; break; }
+                    }
+                    if (targetBtn) break;
+                }
+                if (!targetBtn) {
+                    for (var b of visibleBtns) {
+                        var t = (b.textContent || '').trim();
+                        for (var kw of confirmKeywords) {
+                            if (t.indexOf(kw) !== -1) { targetBtn = b; break; }
+                        }
+                        if (targetBtn) break;
+                    }
+                }
+                if (!targetBtn && visibleBtns.length === 1) { targetBtn = visibleBtns[0]; }
+                if (!targetBtn && visibleBtns.length > 0) { targetBtn = visibleBtns[visibleBtns.length - 1]; }
+                if (!targetBtn) return JSON.stringify({status: 'NO_DIALOG', reason: 'no_visible_btns'});
+                targetBtn.scrollIntoView({block: 'center'});
+                var rect = targetBtn.getBoundingClientRect();
+                return JSON.stringify({
+                    status: 'FOUND',
+                    text: targetBtn.textContent.trim().substring(0, 30),
+                    x: rect.x + rect.width / 2,
+                    y: rect.y + rect.height / 2,
+                    dialogText: dialog.textContent.trim().substring(0, 200)
+                });
+            }""")
+            import json as _json
+            btn = _json.loads(info)
+            if btn.get("status") != "FOUND":
+                if attempt < max_retries - 1:
+                    time.sleep(2)
+                continue
+
+            print(f"  💬 检测到弹窗: {btn.get('dialogText', '')[:60]} | 按钮: {btn.get('text', '')}")
+            self.page.mouse.move(btn["x"], btn["y"])
+            time.sleep(0.2)
+            self.page.mouse.click(btn["x"], btn["y"])
+            print("  ✅ 弹窗按钮已点击")
+            time.sleep(2)
+            return
 
     def _check_submit_errors(self):
         """检测提交后的页面错误提示（toast / 表单验证），返回错误信息或空字符串
@@ -1085,6 +1208,7 @@ def main():
             title=args.title,
             description=description,
             tags=tags,
+            work_dir=str(work_dir),
         )
         bvid, url = uploader.run()
 
