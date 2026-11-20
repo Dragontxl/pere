@@ -2573,25 +2573,6 @@ def render_shard(
             scene_id, seg_idx, audio_file = futures[future]
             try:
                 result = future.result()
-                if result:
-                    rendered_scene, clip_path = result
-                    results[(scene_id, seg_idx)] = (rendered_scene, clip_path)
-
-                    # 上传片段到 R2
-                    if clip_path and r2_prefix and r2_config:
-                        r2_clip_key = f"{r2_prefix}/{os.path.basename(clip_path)}"
-                        save_clip_to_r2(clip_path, r2_clip_key, r2_config)
-
-                    # 报告进度（使用绝对计数）
-                    rendered_count = len(results)
-                    if progress_cb:
-                        progress_cb(
-                            "VIDEO_COMPOSE",
-                            f"镜头 {scene_id} 段{seg_idx} 渲染完成",
-                            start_idx + rendered_count,
-                            total_clips,
-                            sub_phase="RENDER",
-                        )
             except Exception as e:
                 print(f"  ❌ 镜头 {scene_id} 段{seg_idx}: 渲染失败: {e}")
                 if progress_cb:
