@@ -124,6 +124,9 @@ jobs:
   #       音频段, 图片 — 全部上传 R2 供渲染 job 下载
   # ══════════════════════════════════════════════════════════════
   pipeline:
+    # 复用 setup-deps 集中下载的 apt 包离线安装，避免在线 apt-get 偶发网络
+    # 抖动导致安装耗时暴涨（历史单次出现 ~14 分钟卡顿）
+    needs: [setup-deps]
     runs-on: ubuntu-latest
     timeout-minutes: 90
 
@@ -159,17 +162,18 @@ jobs:
           restore-keys: npm-${{ runner.os }}-
           retention-days: 14
 
-      - name: 缓存 apt 包
-        uses: actions/cache@v4
+      - name: 下载 apt 包并离线安装
+        uses: actions/download-artifact@v4
         with:
-          path: /var/cache/apt/archives
-          key: apt-${{ runner.os }}-v3
-          retention-days: 7
-
-      - name: 安装系统依赖
+          name: apt-packages
+          path: /tmp/apt-packages
+      - name: 离线安装系统依赖
         run: |
-          sudo apt-get update -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 -o Acquire::Retries=3
-          sudo apt-get install -y --no-install-recommends -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 -o Acquire::Retries=3 imagemagick fonts-noto-cjk ffmpeg
+          # 从 setup-deps 集中下载的 .deb 离线安装，无需访问 Ubuntu 镜像源，
+          # 消除在线 apt-get 偶发网络抖动导致的长时间卡顿
+          cd /tmp/apt-packages
+          tar xzf apt-packages.tar.gz
+          sudo dpkg -i *.deb 2>/dev/null || sudo apt-get install -f -y -o Acquire::http::Timeout=30 -o Acquire::Retries=3
           sudo rm -rf /var/lib/apt/lists/*
 
       - name: 安装 Python 依赖
