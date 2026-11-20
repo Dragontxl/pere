@@ -1,1 +1,316 @@
-aW1wb3J0IHsgQmluZGluZ3MgfSBmcm9tICcuLi90eXBlcy9lbnYnOwppbXBvcnQgeyBDcnlwdG9TZXJ2aWNlIH0gZnJvbSAnLi9DcnlwdG9TZXJ2aWNlJzsKCmV4cG9ydCBpbnRlcmZhY2UgQmlsaWJpbGlDcmVkZW50aWFsU3RhdHVzIHsKICBjb25maWd1cmVkOiBib29sZWFuOwogIGhhc1Nlc3NkYXRhOiBib29sZWFuOwogIGhhc0JpbGlKY3Q6IGJvb2xlYW47Cn0KCmludGVyZmFjZSBCaWxpYmlsaUNvb2tpZSB7CiAgbmFtZTogc3RyaW5nOwogIHZhbHVlOiBzdHJpbmc7CiAgZG9tYWluOiBzdHJpbmc7CiAgcGF0aDogc3RyaW5nOwogIHNlY3VyZTogYm9vbGVhbjsKICBodHRwT25seTogYm9vbGVhbjsKICBzYW1lU2l0ZTogc3RyaW5nOwogIGV4cGlyYXRpb25EYXRlPzogbnVtYmVyOwp9CgovKioKICogQuerme+8iOWTlOWTqeWTlOWTqe+8ieS4iuS8oOacjeWKoQogKgogKiAtIOWHreaNrueuoeeQhu+8mueUqOaIt+e6pyBDb29raWUg5Yqg5a+G5a2Y5YKo77yIQUVTLUdDTe+8ie+8jOaUr+aMgeWtl+espuS4suWSjCBKU09OIOS4pOenjei+k+WFpeagvOW8jwogKiAtIOS4iuS8oOinpuWPke+8mumAmui/hyBHaXRIdWIgQWN0aW9ucyB3b3JrZmxvdyDmiafooYzmtY/op4jlmajoh6rliqjljJbkuIrkvKAKICogLSDnu5PmnpzlpITnkIbvvJrmjqXmlLbkuIrkvKDlm57osIPvvIzmm7TmlrDku7vliqHnmoQgQuermeeKtuaAgQogKi8KZXhwb3J0IGNsYXNzIEJpbGliaWxpU2VydmljZSB7CiAgcHJpdmF0ZSBjcnlwdG86IENyeXB0b1NlcnZpY2U7CgogIGNvbnN0cnVjdG9yKHByaXZhdGUgZW52OiBCaW5kaW5ncykgewogICAgdGhpcy5jcnlwdG8gPSBuZXcgQ3J5cHRvU2VydmljZShlbnYpOwogIH0KCiAgLyoqCiAgICog5L+d5a2Y55So5oi3IELnq5nlh63mja4KICAgKgogICAqIOaOpeWPlyBDb29raWUg5a2X56ym5Liy77yIIm5hbWUxPXZhbHVlMTsgbmFtZTI9dmFsdWUyIu+8jOa1j+iniOWZqCBEZXZUb29scyDlpI3liLbmoLzlvI/vvIkKICAgKiDmiJYgSlNPTiDmlbDnu4TmoLzlvI/vvIznu5/kuIDovazkuLogSlNPTiDmlbDnu4TlkI7liqDlr4blrZjlgqjjgIIKICAgKgogICAqIEBwYXJhbSB1c2VySWQg55So5oi3IElECiAgICogQHBhcmFtIGNvb2tpZXNJbnB1dCBDb29raWUg5a2X56ym5Liy5oiWIEpTT04g5pWw57uECiAgICogQHJldHVybnMg5Yet5o2u54q25oCBCiAgICogQHRocm93cyDnvLrlsJEgU0VTU0RBVEEg5pe25oqb5Ye66ZSZ6K+vCiAgICovCiAgYXN5bmMgc2F2ZUNyZWRlbnRpYWxzKHVzZXJJZDogc3RyaW5nLCBjb29raWVzSW5wdXQ6IHN0cmluZyk6IFByb21pc2U8QmlsaWJpbGlDcmVkZW50aWFsU3RhdHVzPiB7CiAgICBjb25zdCBjb29raWVzID0gdGhpcy5wYXJzZUNvb2tpZXMoY29va2llc0lucHV0KTsKICAgIHJldHVybiB0aGlzLnNhdmVDcmVkZW50aWFsc0Zyb21Db29raWVzKHVzZXJJZCwgY29va2llcyk7CiAgfQoKICAvKioKICAgKiDnm7TmjqXku6UgQ29va2llIOaVsOe7hOS/neWtmO+8iOS+m+acrOWcsOaJq+eggeWKqeaJiyAvIOWQjuerr+WGhemDqOiwg+eUqO+8iQogICAqLwogIGFzeW5jIHNhdmVDcmVkZW50aWFsc0Zyb21Db29raWVzKAogICAgdXNlcklkOiBzdHJpbmcsCiAgICBjb29raWVzOiBCaWxpYmlsaUNvb2tpZVtdLAogICk6IFByb21pc2U8QmlsaWJpbGlDcmVkZW50aWFsU3RhdHVzPiB7CiAgICBpZiAoY29va2llcy5sZW5ndGggPT09IDApIHsKICAgICAgdGhyb3cgbmV3IEVycm9yKCfmnKrop6PmnpDliLDku7vkvZUgQ29va2ll77yM6K+35qOA5p+l6L6T5YWl5qC85byPJyk7CiAgICB9CgogICAgY29uc3QgaGFzU2Vzc2RhdGEgPSBjb29raWVzLnNvbWUoYyA9PiBjLm5hbWUgPT09ICdTRVNTREFUQScpOwogICAgY29uc3QgaGFzQmlsaUpjdCA9IGNvb2tpZXMuc29tZShjID0+IGMubmFtZSA9PT0gJ2JpbGlfamN0Jyk7CgogICAgaWYgKCFoYXNTZXNzZGF0YSkgewogICAgICB0aHJvdyBuZXcgRXJyb3IoJ0Nvb2tpZSDkuK3nvLrlsJEgU0VTU0RBVEHvvIzml6Dms5XnmbvlvZUgQuermeOAguivt+mHjeaWsOS7jua1j+iniOWZqOWkjeWItuWujOaVtCBDb29raWXjgIInKTsKICAgIH0KCiAgICBjb25zdCBjb29raWVzSnNvbiA9IEpTT04uc3RyaW5naWZ5KGNvb2tpZXMpOwogICAgY29uc3QgZW5jcnlwdGVkID0gYXdhaXQgdGhpcy5jcnlwdG8uZW5jcnlwdChjb29raWVzSnNvbik7CgogICAgYXdhaXQgdGhpcy5lbnYuREIucHJlcGFyZShgCiAgICAgIElOU0VSVCBJTlRPIGJpbGliaWxpX2NyZWRlbnRpYWxzICh1c2VyX2lkLCBjb29raWVzX2VuY3J5cHRlZCwgaGFzX3Nlc3NkYXRhLCBoYXNfYmlsaV9qY3QsIHVwZGF0ZWRfYXQpCiAgICAgIFZBTFVFUyAoPywgPywgPywgPywgU1RSRlRJTUUoJyVZLSVtLSVkVCVIOiVNOiVmWicsICdub3cnKSkKICAgICAgT04gQ09ORkxJQ1QodXNlcl9pZCkgRE8gVVBEQVRFIFNFVAogICAgICAgIGNvb2tpZXNfZW5jcnlwdGVkID0gZXhjbHVkZWQuY29va2llc19lbmNyeXB0ZWQsCiAgICAgICAgaGFzX3Nlc3NkYXRhID0gZXhjbHVkZWQuaGFzX3Nlc3NkYXRhLAogICAgICAgIGhhc19iaWxpX2pjdCA9IGV4Y2x1ZGVkLmhhc19iaWxpX2pjdCwKICAgICAgICB1cGRhdGVkX2F0ID0gZXhjbHVkZWQudXBkYXRlZF9hdAogICAgYCkuYmluZCh1c2VySWQsIGVuY3J5cHRlZCwgaGFzU2Vzc2RhdGEsIGhhc0JpbGlKY3QpLnJ1bigpOwoKICAgIHJldHVybiB7IGNvbmZpZ3VyZWQ6IHRydWUsIGhhc1Nlc3NkYXRhLCBoYXNCaWxpSmN0IH07CiAgfQoKICAvKioKICAgKiDojrflj5bnlKjmiLcgQuermeWHreaNru+8iOino+WvhuWQjui/lOWbniBKU09OIOWtl+espuS4su+8iQogICAqLwogIGFzeW5jIGdldENyZWRlbnRpYWxzKHVzZXJJZDogc3RyaW5nKTogUHJvbWlzZTxzdHJpbmcgfCBudWxsPiB7CiAgICBjb25zdCByb3cgPSBhd2FpdCB0aGlzLmVudi5EQi5wcmVwYXJlKAogICAgICAnU0VMRUNUIGNvb2tpZXNfZW5jcnlwdGVkIEZST00gYmlsaWJpbGlfY3JlZGVudGlhbHMgV0hFUkUgdXNlcl9pZCA9ID8nCiAgICApLmJpbmQodXNlcklkKS5maXJzdCgpOwoKICAgIGlmICghcm93KSByZXR1cm4gbnVsbDsKCiAgICBjb25zdCBkZWNyeXB0ZWQgPSBhd2FpdCB0aGlzLmNyeXB0by5kZWNyeXB0KChyb3cgYXMgYW55KS5jb29raWVzX2VuY3J5cHRlZCk7CiAgICByZXR1cm4gZGVjcnlwdGVkOwogIH0KCiAgLyoqCiAgICog6I635Y+W55So5oi35Yet5o2u54q25oCB77yI5LiN6L+U5Zue5a6M5pW0IENvb2tpZe+8jOeUqOS6juWJjeerr+Wxleekuu+8iQogICAqLwogIGFzeW5jIGdldENyZWRlbnRpYWxTdGF0dXModXNlcklkOiBzdHJpbmcpOiBQcm9taXNlPEJpbGliaWxpQ3JlZGVudGlhbFN0YXR1cz4gewogICAgY29uc3Qgcm93ID0gYXdhaXQgdGhpcy5lbnYuREIucHJlcGFyZSgKICAgICAgJ1NFTEVDVCBoYXNfc2Vzc2RhdGEsIGhhc19iaWxpX2pjdCBGUk9NIGJpbGliaWxpX2NyZWRlbnRpYWxzIFdIRVJFIHVzZXJfaWQgPSA/JwogICAgKS5iaW5kKHVzZXJJZCkuZmlyc3QoKTsKCiAgICBpZiAoIXJvdykgewogICAgICByZXR1cm4geyBjb25maWd1cmVkOiBmYWxzZSwgaGFzU2Vzc2RhdGE6IGZhbHNlLCBoYXNCaWxpSmN0OiBmYWxzZSB9OwogICAgfQoKICAgIHJldHVybiB7CiAgICAgIGNvbmZpZ3VyZWQ6IHRydWUsCiAgICAgIGhhc1Nlc3NkYXRhOiAhIShyb3cgYXMgYW55KS5oYXNfc2Vzc2RhdGEsCiAgICAgIGhhc0JpbGlKY3Q6ICEhKHJvdyBhcyBhbnkpLmhhc19iaWxpX2pjdCwKICAgIH07CiAgfQoKICAvKioKICAgKiDliKDpmaTnlKjmiLflh63mja4KICAgKi8KICBhc3luYyBkZWxldGVDcmVkZW50aWFscyh1c2VySWQ6IHN0cmluZyk6IFByb21pc2U8Ym9vbGVhbj4gewogICAgY29uc3QgcmVzdWx0ID0gYXdhaXQgdGhpcy5lbnYuREIucHJlcGFyZSgKICAgICAgJ0RFTEVURSBGUk9NIGJpbGliaWxpX2NyZWRlbnRpYWxzIFdIRVJFIHVzZXJfaWQgPSA/JwogICAgKS5iaW5kKHVzZXJJZCkucnVuKCk7CiAgICAvLyBEMSDnmoTlj5jmm7TooYzmlbDlnKggcmVzdWx0Lm1ldGEuY2hhbmdlc++8iOaXp+eJiOacrOS4uiByZXN1bHQuY2hhbmdlc++8iQogICAgY29uc3QgY2hhbmdlcyA9IChyZXN1bHQgYXMgYW55KT8ubWV0YT8uY2hhbmdlcyA/PyAocmVzdWx0IGFzIGFueSk/LmNoYW5nZXMgPz8gMDsKICAgIHJldHVybiBjaGFuZ2VzID4gMDsKICB9CgogIC8qKgogICAqIOinpuWPkSBC56uZ5LiK5LygCiAgICoKICAgKiDmoKHpqozku7vliqHop4bpopHlt7LnlJ/miJDjgIHlh63mja7lt7LphY3nva7lkI7vvIxkaXNwYXRjaCBHaXRIdWIgQWN0aW9ucyB3b3JrZmxvdwogICAqIOaJp+ihjOa1j+iniOWZqOiHquWKqOWMluS4iuS8oOOAggogICAqCiAgICogQHBhcmFtIHRhc2tJZCDku7vliqEgSUQKICAgKiBAcGFyYW0gdXNlcklkIOeUqOaItyBJRAogICAqIEB0aHJvd3Mg5Lu75Yqh5peg6KeG6aKR44CB5Yet5o2u5pyq6YWN572u44CB5LiK5Lyg6L+b6KGM5Lit44CBR2l0SHViIOacqumFjee9ruaXtuaKm+WHuumUmeivrwogICAqLwogIGFzeW5jIHRyaWdnZXJVcGxvYWQodGFza0lkOiBzdHJpbmcsIHVzZXJJZDogc3RyaW5nKTogUHJvbWlzZTx2b2lkPiB7CiAgICBjb25zdCB0YXNrID0gYXdhaXQgdGhpcy5lbnYuREIucHJlcGFyZSgKICAgICAgJ1NFTEVDVCAqIEZST00gdGFza3MgV0hFUkUgaWQgPSA/JwogICAgKS5iaW5kKHRhc2tJZCkuZmlyc3QoKSBhcyBhbnk7CgogICAgaWYgKCF0YXNrKSB7CiAgICAgIHRocm93IG5ldyBFcnJvcign5Lu75Yqh5LiN5a2Y5ZyoJyk7CiAgICB9CgogICAgaWYgKCF0YXNrLmZpbmFsX3ZpZGVvX2tleSkgewogICAgICB0aHJvdyBuZXcgRXJyb3IoJ+S7u+WKoeWwmuacqueUn+aIkOinhumike+8jOaXoOazleS4iuS8oCBC56uZJyk7CiAgICB9CgogICAgLy8g54q25oCB5Y2h5ZyoIHBlbmRpbmcvdXBsb2FkaW5nIOS9huWunumZhSB3b3JrZmxvdyDlj6/og73mnKrmiafooYzmiJblm57osIPmnKrliLDovr7vvIwKICAgIC8vIOS8muWvvOiHtOaMiemSruawuOS5heS4jeWPr+eUqOOAgueUqOaIt+W3suWcqOWJjeerr+ehruiupOmHjeS8oO+8jOi/memHjOmHjee9rueKtuaAgeW5tumHjeaWsOinpuWPke+8jAogICAgLy8g6YG/5YWN5Lu75Yqh6KKr5rC45LmF5Y2h5q2777yI5LiL6Z2i55qEIFVQREFURSDkvJrmiornirbmgIHph43mlrDnva7kuLogcGVuZGluZ++8ieOAggogICAgaWYgKHRhc2suYmlsaWJpbGlfc3RhdHVzID09PSAncGVuZGluZycgfHwgdGFzay5iaWxpYmlsaV9zdGF0dXMgPT09ICd1cGxvYWRpbmcnKSB7CiAgICAgIGF3YWl0IHRoaXMubG9nVGFzayh0YXNrSWQsICdCSUxJQklMSScsICdXQVJOJywgJ+ajgOa1i+WIsOS4iuasoeS4iuS8oOeKtuaAgeacquato+W4uOWujOaIkO+8jOmHjee9rueKtuaAgeWQjumHjeaWsOinpuWPkScpOwogICAgfQoKICAgIC8vIOiOt+WPlueUqOaIt+WHreaNrgogICAgY29uc3QgY3JlZGVudGlhbHMgPSBhd2FpdCB0aGlzLmdldENyZWRlbnRpYWxzKHVzZXJJZCk7CiAgICBpZiAoIWNyZWRlbnRpYWxzKSB7CiAgICAgIHRocm93IG5ldyBFcnJvcign5pyq6YWN572uIELnq5nlh63mja7vvIzor7flhYjlnKjorr7nva7pobXpnaLphY3nva4gQ29va2llJyk7CiAgICB9CgogICAgLy8g5bCG6Kej5a+G5ZCO55qEIENvb2tpZSDlhpnlhaUgUjIg5Li05pe25a2Y5YKo77yMQ0kg6ISa5pys5LuO5Lit5LiL6L2977yI6YG/5YWNIENvb2tpZSDlh7rnjrDlnKggd29ya2Zsb3cgcGF5bG9hZCDkuK3vvIkKICAgIGNvbnN0IGNvb2tpZXNSMktleSA9IGBiaWxpYmlsaV91cGxvYWQvJHt0YXNrSWR9L2Nvb2tpZXMuanNvbmA7CiAgICBhd2FpdCB0aGlzLmVudi5SMi5wdXQoY29va2llc1IyS2V5LCBjcmVkZW50aWFscywgewogICAgICBodHRwTWV0YWRhdGE6IHsgY29udGVudFR5cGU6ICdhcHBsaWNhdGlvbi9qc29uJyB9LAogICAgfSk7CgogICAgLy8g5pu05paw5LiK5Lyg54q25oCBCiAgICBhd2FpdCB0aGlzLmVudi5EQi5wcmVwYXJlKGAKICAgICAgVVBEQVRFIHRhc2tzIFNFVCBiaWxpYmlsaV9zdGF0dXMgPSAncGVuZGluZycsIHVwZGF0ZWRfYXQgPSBTVFJGVElNRSgnJVktJW0tJWRUJUg6JU06JWZaJywgJ25vdycpIFdIRVJFIGlkID0gPwogICAgYCkuYmluZCh0YXNrSWQpLnJ1bigpOwoKICAgIC8vIERpc3BhdGNoIEdpdEh1YiBBY3Rpb25zIHdvcmtmbG93CiAgICBjb25zdCBvd25lciA9IHRoaXMuZW52LkdJVEhVQl9SRVBPX09XTkVSOwogICAgY29uc3QgcmVwbyA9IHRoaXMuZW52LkdJVEhVQl9SRVBPX05BTUU7CiAgICBjb25zdCBhcGlLZXkgPSB0aGlzLmVudi5HSVRIVUJfUEFUOwoKICAgIGlmICghb3duZXIgfHwgIXJlcG8gfHwgIWFwaUtleSkgewogICAgICB0aHJvdyBuZXcgRXJyb3IoJ0dpdEh1YiDku5PlupPmnKrphY3nva4nKTsKICAgIH0KCiAgICBjb25zdCBwYXlsb2FkID0gewogICAgICBldmVudF90eXBlOiAnYmlsaWJpbGktdXBsb2FkJywKICAgICAgY2xpZW50X3BheWxvYWQ6IHsKICAgICAgICB0YXNrX2lkOiB0YXNrSWQsCiAgICAgICAgdmlkZW9fa2V5OiB0YXNrLmZpbmFsX3ZpZGVvX2tleSwKICAgICAgICBjb3Zlcl9rZXk6IHRhc2suY292ZXJfaW1hZ2Vfa2V5IHx8ICcnLAogICAgICAgIHRpdGxlOiB0YXNrLnRpdGxlIHx8ICcnLAogICAgICAgIGFydGljbGVfY29udGVudDogdGFzay5hcnRpY2xlX2NvbnRlbnQgfHwgJycsCiAgICAgICAgb3JpZW50YXRpb246IHRhc2sub3JpZW50YXRpb24gfHwgJ2xhbmRzY2FwZScsCiAgICAgICAgY29va2llc19rZXk6IGNvb2tpZXNSMktleSwKICAgICAgfSwKICAgIH07CgogICAgLy8g5LiOIHVwbG9hZC1iaWxpYmlsaS55bWwg55qEIGByZXBvc2l0b3J5X2Rpc3BhdGNoOiB0eXBlczogW2JpbGliaWxpLXVwbG9hZF1gIOS/neaMgeS4gOiHtO+8jAogICAgLy8g5LiOIFRhc2tTZXJ2aWNlIOS9v+eUqOWQjOS4gOS4qiByZXBvc2l0b3J5X2Rpc3BhdGNoIOerr+eCue+8iGZpbmUtZ3JhaW5lZCDmnYPpmZDvvJpDb250ZW50czogd3JpdGXvvIkKICAgIGNvbnN0IHJlc3AgPSBhd2FpdCBmZXRjaCgKICAgICAgYGh0dHBzOi8vYXBpLmdpdGh1Yi5jb20vcmVwb3MvJHtvd25lcn0vJHtyZXBvfS9kaXNwYXRjaGVzYCwKICAgICAgewogICAgICAgIG1ldGhvZDogJ1BPU1QnLAogICAgICAgIGhlYWRlcnM6IHsKICAgICAgICAgIEF1dGhvcml6YXRpb246IGBCZWFyZXIgJHthcGlLZXl9YCwKICAgICAgICAgIEFjY2VwdDogJ2FwcGxpY2F0aW9uL3ZuZC5naXRodWIranNvbicsCiAgICAgICAgICAnWC1HaXRIdWItQXBpLVZlcnNpb24nOiAnMjAyMi0xMS0yOCcsCiAgICAgICAgICAnQ29udGVudC1UeXBlJzogJ2FwcGxpY2F0aW9uL2pzb24nLAogICAgICAgICAgJ1VzZXItQWdlbnQnOiAncGV4ZWwtcmVtb3Rpb24tcGxhdGZvcm0nLAogICAgICAgIH0sCiAgICAgICAgYm9keTogSlNPTi5zdHJpbmdpZnkocGF5bG9hZCksCiAgICAgIH0KICAgICk7CgogICAgaWYgKCFyZXNwLm9rKSB7CiAgICAgIGNvbnN0IGVyclRleHQgPSBhd2FpdCByZXNwLnRleHQoKTsKICAgICAgLy8g5Zue5rua5LiK5Lyg54q25oCBCiAgICAgIGF3YWl0IHRoaXMuZW52LkRCLnByZXBhcmUoYAogICAgICAgIFVQREFURSB0YXNrcyBTRVQgYmlsaWJpbGlfc3RhdHVzID0gTlVMTCwgdXBkYXRlZF9hdCA9IFNUUkZUSU1FKCclWS0lbS0lZFQlSDolTTolZlonLCAnbm93JykgV0hFUkUgaWQgPSA/CiAgICAgIGApLmJpbmQodGFza0lkKS5ydW4oKTsKICAgICAgdGhyb3cgbmV3IEVycm9yKGBHaXRIdWIgQWN0aW9ucyDop6blj5HlpLHotKU6ICR7cmVzcC5zdGF0dXN9ICR7ZXJyVGV4dH1gKTsKICAgIH0KCiAgICBhd2FpdCB0aGlzLmxvZ1Rhc2sodGFza0lkLCAnQklMSUJJTEknLCAnSU5GTycsICdC56uZ5LiK5Lyg5Lu75Yqh5bey6Kem5Y+R77yM562J5b6FIENJIOaJp+ihjCcpOwogIH0KCiAgLyoqCiAgICog5aSE55CGIELnq5nkuIrkvKDnu5Pmnpzlm57osIMKICAgKgogICAqIEBwYXJhbSBib2R5IOWbnuiwg+S9k++8jOWQqyB0YXNrX2lkLCBzdGF0dXMsIGJ2aWQsIHVybCwgZXJyb3IKICAgKi8KICBhc3luYyBoYW5kbGVVcGxvYWRSZXN1bHQoYm9keTogYW55KTogUHJvbWlzZTx7IHN1Y2Nlc3M6IGJvb2xlYW47IHRhc2tJZDogc3RyaW5nIH0+IHsKICAgIGNvbnN0IHsgdGFza19pZDogdGFza0lkLCBzdGF0dXMsIGJ2aWQsIHVybCwgZXJyb3IgfSA9IGJvZHk7CgogICAgY29uc3QgbmV3U3RhdHVzID0gc3RhdHVzID09PSAnc3VjY2VzcycgPyAnc3VjY2VzcycgOiAnZmFpbGVkJzsKCiAgICBhd2FpdCB0aGlzLmVudi5EQi5wcmVwYXJlKGAKICAgICAgVVBEQVRFIHRhc2tzIFNFVCBiaWxpYmlsaV9zdGF0dXMgPSA/LCBiaWxpYmlsaV9idmlkID0gPywgYmlsaWJpbGlfdXJsID0gPywKICAgICAgICB1cGRhdGVkX2F0ID0gU1RSRlRJTUUoJyVZLSVtLSVkVCVIOiVNOiVmWicsICdub3cnKQogICAgICBXSEVSRSBpZCA9ID8KICAgIGApLmJpbmQobmV3U3RhdHVzLCBidmlkIHx8IG51bGwsIHVybCB8fCBudWxsLCB0YXNrSWQpLnJ1bigpOwoKICAgIGlmIChlcnJvcikgewogICAgICBhd2FpdCB0aGlzLmxvZ1Rhc2sodGFza0lkLCAnQklMSUJJTEknLCAnRVJST1InLCBgQuermeS4iuS8oOWksei0pTogJHtlcnJvcn1gKTsKICAgIH0gZWxzZSBpZiAoYnZpZCB8fCB1cmwpIHsKICAgICAgYXdhaXQgdGhpcy5sb2dUYXNrKHRhc2tJZCwgJ0JJTElCSUxJJywgJ0lORk8nLCBgQuermeS4iuS8oOaIkOWKnzogJHt1cmwgfHwgYGh0dHBzOi8vd3d3LmJpbGliaWxpLmNvbS92aWRlby8ke2J2aWR9YH1gKTsKICAgIH0gZWxzZSB7CiAgICAgIGF3YWl0IHRoaXMubG9nVGFzayh0YXNrSWQsICdCSUxJQklMSScsICdJTkZPJywgJ0Lnq5nkuIrkvKDlt7Lmj5DkuqTvvIjlrqHmoLjkuK3vvIzpk77mjqXlvoXnlJ/miJDvvIknKTsKICAgIH0KCiAgICByZXR1cm4geyBzdWNjZXNzOiB0cnVlLCB0YXNrSWQgfTsKICB9CgogIC8qKgogICAqIOino+aekCBDb29raWUg6L6T5YWl77yM57uf5LiA5Li6IEpTT04g5pWw57uE5qC85byPCiAgICoKICAgKiDmlK/mjIHkuKTnp43ovpPlhaXvvJoKICAgKiAxLiDlrZfnrKbkuLLmoLzlvI/vvJoibmFtZTE9dmFsdWUxOyBuYW1lMj12YWx1ZTIi77yI5rWP6KeI5ZmoIERldlRvb2xzIOWkjeWItuagvOW8j++8iQogICAqIDIuIEpTT04g5pWw57uE5qC85byP77yaW3tuYW1lLCB2YWx1ZSwgZG9tYWluLCBwYXRoLCAuLi59XQogICAqLwogIHByaXZhdGUgcGFyc2VDb29raWVzKGlucHV0OiBzdHJpbmcpOiBCaWxpYmlsaUNvb2tpZVtdIHsKICAgIGNvbnN0IHRyaW1tZWQgPSBpbnB1dC50cmltKCk7CgogICAgLy8g5bCd6K+VIEpTT04g5pWw57uE5qC85byPCiAgICBpZiAodHJpbW1lZC5zdGFydHNXaXRoKCdbJykpIHsKICAgICAgdHJ5IHsKICAgICAgICBjb25zdCBwYXJzZWQgPSBKU09OLnBhcnNlKHRyaW1tZWQpOwogICAgICAgIGlmIChBcnJheS5pc0FycmF5KHBhcnNlZCkpIHsKICAgICAgICAgIHJldHVybiBwYXJzZWQubWFwKChjOiBhbnkpID0+ICh7CiAgICAgICAgICAgIG5hbWU6IGMubmFtZSwKICAgICAgICAgICAgdmFsdWU6IGMudmFsdWUsCiAgICAgICAgICAgIGRvbWFpbjogYy5kb21haW4gfHwgJy5iaWxpYmlsaS5jb20nLAogICAgICAgICAgICBwYXRoOiBjLnBhdGggfHwgJy8nLAogICAgICAgICAgICBzZWN1cmU6IGMuc2VjdXJlICE9PSBmYWxzZSwKICAgICAgICAgICAgaHR0cE9ubHk6IGMuaHR0cE9ubHkgfHwgZmFsc2UsCiAgICAgICAgICAgIHNhbWVTaXRlOiBjLnNhbWVTaXRlIHx8ICdMYXgnLAogICAgICAgICAgICBleHBpcmF0aW9uRGF0ZTogYy5leHBpcmF0aW9uRGF0ZSwKICAgICAgICAgIH0pKTsKICAgICAgICB9CiAgICAgIH0gY2F0Y2ggewogICAgICAgIC8vIOS4jeaYr+acieaViCBKU09O77yM5Zue6YCA5Yiw5a2X56ym5Liy5qC85byPCiAgICAgIH0KICAgIH0KCiAgICAvLyDlrZfnrKbkuLLmoLzlvI/vvJoibmFtZTE9dmFsdWUxOyBuYW1lMj12YWx1ZTIiCiAgICBjb25zdCBjb29raWVzOiBCaWxpYmlsaUNvb2tpZVtdID0gW107CiAgICBjb25zdCBwYWlycyA9IHRyaW1tZWQuc3BsaXQoJzsnKS5tYXAocCA9PiBwLnRyaW0oKSkuZmlsdGVyKHAgPT4gcCk7CiAgICBmb3IgKGNvbnN0IHBhaXIgb2YgcGFpcnMpIHsKICAgICAgY29uc3QgZXFJbmRleCA9IHBhaXIuaW5kZXhPZignPScpOwogICAgICBpZiAoZXFJbmRleCA8PSAwKSBjb250aW51ZTsKICAgICAgY29uc3QgbmFtZSA9IHBhaXIuc3Vic3RyaW5nKDAsIGVxSW5kZXgpLnRyaW0oKTsKICAgICAgY29uc3QgdmFsdWUgPSBwYWlyLnN1YnN0cmluZyhlcUluZGV4ICsgMSkudHJpbSgpOwogICAgICBpZiAobmFtZSAmJiB2YWx1ZSkgewogICAgICAgIGNvb2tpZXMucHVzaCh7CiAgICAgICAgICBuYW1lLAogICAgICAgICAgdmFsdWUsCiAgICAgICAgICBkb21haW46ICcuYmlsaWJpbGkuY29tJywKICAgICAgICAgIHBhdGg6ICcvJywKICAgICAgICAgIHNlY3VyZTogdHJ1ZSwKICAgICAgICAgIGh0dHBPbmx5OiBmYWxzZSwKICAgICAgICAgIHNhbWVTaXRlOiAnTGF4JywKICAgICAgICB9KTsKICAgICAgfQogICAgfQoKICAgIHJldHVybiBjb29raWVzOwogIH0KCiAgcHJpdmF0ZSBhc3luYyBsb2dUYXNrKHRhc2tJZDogc3RyaW5nLCBwaGFzZTogc3RyaW5nLCBsZXZlbDogc3RyaW5nLCBtZXNzYWdlOiBzdHJpbmcpOiBQcm9taXNlPHZvaWQ+IHsKICAgIGF3YWl0IHRoaXMuZW52LkRCLnByZXBhcmUoYAogICAgICBJTlNFUlQgSU5UTyBvcGVyYXRpb25fbG9ncyAodGFza19pZCwgcGhhc2UsIGxldmVsLCBtZXNzYWdlLCBjcmVhdGVkX2F0KQogICAgICBWQUxVRVMgKD8sID8sID8sID8sIFNUUkZUSU1FKCclWS0lbS0lZFQlSDolTTolZlonLCAnbm93JykpCiAgICBgKS5iaW5kKHRhc2tJZCwgcGhhc2UsIGxldmVsLCBtZXNzYWdlKS5ydW4oKTsKICB9Cn0K
+import { Bindings } from '../types/env';
+import { CryptoService } from './CryptoService';
+
+export interface BilibiliCredentialStatus {
+  configured: boolean;
+  hasSessdata: boolean;
+  hasBiliJct: boolean;
+}
+
+interface BilibiliCookie {
+  name: string;
+  value: string;
+  domain: string;
+  path: string;
+  secure: boolean;
+  httpOnly: boolean;
+  sameSite: string;
+  expirationDate?: number;
+}
+
+/**
+ * B站（哔哩哔哩）上传服务
+ *
+ * - 凭据管理：用户级 Cookie 加密存储（AES-GCM），支持字符串和 JSON 两种输入格式
+ * - 上传触发：通过 GitHub Actions workflow 执行浏览器自动化上传
+ * - 结果处理：接收上传回调，更新任务的 B站状态
+ */
+export class BilibiliService {
+  private crypto: CryptoService;
+
+  constructor(private env: Bindings) {
+    this.crypto = new CryptoService(env);
+  }
+
+  /**
+   * 保存用户 B站凭据
+   *
+   * 接受 Cookie 字符串（"name1=value1; name2=value2"，浏览器 DevTools 复制格式）
+   * 或 JSON 数组格式，统一转为 JSON 数组后加密存储。
+   *
+   * @param userId 用户 ID
+   * @param cookiesInput Cookie 字符串或 JSON 数组
+   * @returns 凭据状态
+   * @throws 缺少 SESSDATA 时抛出错误
+   */
+  async saveCredentials(userId: string, cookiesInput: string): Promise<BilibiliCredentialStatus> {
+    const cookies = this.parseCookies(cookiesInput);
+    return this.saveCredentialsFromCookies(userId, cookies);
+  }
+
+  /**
+   * 直接以 Cookie 数组保存（供本地扫码助手 / 后端内部调用）
+   */
+  async saveCredentialsFromCookies(
+    userId: string,
+    cookies: BilibiliCookie[],
+  ): Promise<BilibiliCredentialStatus> {
+    if (cookies.length === 0) {
+      throw new Error('未解析到任何 Cookie，请检查输入格式');
+    }
+
+    const hasSessdata = cookies.some(c => c.name === 'SESSDATA');
+    const hasBiliJct = cookies.some(c => c.name === 'bili_jct');
+
+    if (!hasSessdata) {
+      throw new Error('Cookie 中缺少 SESSDATA，无法登录 B站。请重新从浏览器复制完整 Cookie。');
+    }
+
+    const cookiesJson = JSON.stringify(cookies);
+    const encrypted = await this.crypto.encrypt(cookiesJson);
+
+    await this.env.DB.prepare(`
+      INSERT INTO bilibili_credentials (user_id, cookies_encrypted, has_sessdata, has_bili_jct, updated_at)
+      VALUES (?, ?, ?, ?, STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now'))
+      ON CONFLICT(user_id) DO UPDATE SET
+        cookies_encrypted = excluded.cookies_encrypted,
+        has_sessdata = excluded.has_sessdata,
+        has_bili_jct = excluded.has_bili_jct,
+        updated_at = excluded.updated_at
+    `).bind(userId, encrypted, hasSessdata, hasBiliJct).run();
+
+    return { configured: true, hasSessdata, hasBiliJct };
+  }
+
+  /**
+   * 获取用户 B站凭据（解密后返回 JSON 字符串）
+   */
+  async getCredentials(userId: string): Promise<string | null> {
+    const row = await this.env.DB.prepare(
+      'SELECT cookies_encrypted FROM bilibili_credentials WHERE user_id = ?'
+    ).bind(userId).first();
+
+    if (!row) return null;
+
+    const decrypted = await this.crypto.decrypt((row as any).cookies_encrypted);
+    return decrypted;
+  }
+
+  /**
+   * 获取用户凭据状态（不返回完整 Cookie，用于前端展示）
+   */
+  async getCredentialStatus(userId: string): Promise<BilibiliCredentialStatus> {
+    const row = await this.env.DB.prepare(
+      'SELECT has_sessdata, has_bili_jct FROM bilibili_credentials WHERE user_id = ?'
+    ).bind(userId).first();
+
+    if (!row) {
+      return { configured: false, hasSessdata: false, hasBiliJct: false };
+    }
+
+    return {
+      configured: true,
+      hasSessdata: !!(row as any).has_sessdata,
+      hasBiliJct: !!(row as any).has_bili_jct,
+    };
+  }
+
+  /**
+   * 删除用户凭据
+   */
+  async deleteCredentials(userId: string): Promise<boolean> {
+    const result = await this.env.DB.prepare(
+      'DELETE FROM bilibili_credentials WHERE user_id = ?'
+    ).bind(userId).run();
+    // D1 的变更行数在 result.meta.changes（旧版本为 result.changes）
+    const changes = (result as any)?.meta?.changes ?? (result as any)?.changes ?? 0;
+    return changes > 0;
+  }
+
+  /**
+   * 触发 B站上传
+   *
+   * 校验任务视频已生成、凭据已配置后，dispatch GitHub Actions workflow
+   * 执行浏览器自动化上传。
+   *
+   * @param taskId 任务 ID
+   * @param userId 用户 ID
+   * @throws 任务无视频、凭据未配置、上传进行中、GitHub 未配置时抛出错误
+   */
+  async triggerUpload(taskId: string, userId: string): Promise<void> {
+    const task = await this.env.DB.prepare(
+      'SELECT * FROM tasks WHERE id = ?'
+    ).bind(taskId).first() as any;
+
+    if (!task) {
+      throw new Error('任务不存在');
+    }
+
+    if (!task.final_video_key) {
+      throw new Error('任务尚未生成视频，无法上传 B站');
+    }
+
+    // 状态卡在 pending/uploading 但实际 workflow 可能未执行或回调未到达，
+    // 会导致按钮永久不可用。用户已在前端确认重传，这里重置状态并重新触发，
+    // 避免任务被永久卡死（下面的 UPDATE 会把状态重新置为 pending）。
+    if (task.bilibili_status === 'pending' || task.bilibili_status === 'uploading') {
+      await this.logTask(taskId, 'BILIBILI', 'WARN', '检测到上次上传状态未正常完成，重置状态后重新触发');
+    }
+
+    // 获取用户凭据
+    const credentials = await this.getCredentials(userId);
+    if (!credentials) {
+      throw new Error('未配置 B站凭据，请先在设置页面配置 Cookie');
+    }
+
+    // 将解密后的 Cookie 写入 R2 临时存储，CI 脚本从中下载（避免 Cookie 出现在 workflow payload 中）
+    const cookiesR2Key = `bilibili_upload/${taskId}/cookies.json`;
+    await this.env.R2.put(cookiesR2Key, credentials, {
+      httpMetadata: { contentType: 'application/json' },
+    });
+
+    // 更新上传状态
+    await this.env.DB.prepare(`
+      UPDATE tasks SET bilibili_status = 'pending', updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?
+    `).bind(taskId).run();
+
+    // Dispatch GitHub Actions workflow
+    const owner = this.env.GITHUB_REPO_OWNER;
+    const repo = this.env.GITHUB_REPO_NAME;
+    const apiKey = this.env.GITHUB_PAT;
+
+    if (!owner || !repo || !apiKey) {
+      throw new Error('GitHub 仓库未配置');
+    }
+
+    const payload = {
+      event_type: 'bilibili-upload',
+      client_payload: {
+        task_id: taskId,
+        video_key: task.final_video_key,
+        cover_key: task.cover_image_key || '',
+        title: task.title || '',
+        article_content: task.article_content || '',
+        orientation: task.orientation || 'landscape',
+        cookies_key: cookiesR2Key,
+      },
+    };
+
+    // 与 upload-bilibili.yml 的 `repository_dispatch: types: [bilibili-upload]` 保持一致，
+    // 与 TaskService 使用同一个 repository_dispatch 端点（fine-grained 权限：Contents: write）
+    const resp = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/dispatches`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+          'Content-Type': 'application/json',
+          'User-Agent': 'pexel-remotion-platform',
+        },
+        body: JSON.stringify(payload),
+      }
+    );
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      // 回滚上传状态
+      await this.env.DB.prepare(`
+        UPDATE tasks SET bilibili_status = NULL, updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?
+      `).bind(taskId).run();
+      throw new Error(`GitHub Actions 触发失败: ${resp.status} ${errText}`);
+    }
+
+    await this.logTask(taskId, 'BILIBILI', 'INFO', 'B站上传任务已触发，等待 CI 执行');
+  }
+
+  /**
+   * 处理 B站上传结果回调
+   *
+   * @param body 回调体，含 task_id, status, bvid, url, error
+   */
+  async handleUploadResult(body: any): Promise<{ success: boolean; taskId: string }> {
+    const { task_id: taskId, status, bvid, url, error } = body;
+
+    const newStatus = status === 'success' ? 'success' : 'failed';
+
+    await this.env.DB.prepare(`
+      UPDATE tasks SET bilibili_status = ?, bilibili_bvid = ?, bilibili_url = ?,
+        updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now')
+      WHERE id = ?
+    `).bind(newStatus, bvid || null, url || null, taskId).run();
+
+    if (error) {
+      await this.logTask(taskId, 'BILIBILI', 'ERROR', `B站上传失败: ${error}`);
+    } else if (bvid || url) {
+      await this.logTask(taskId, 'BILIBILI', 'INFO', `B站上传成功: ${url || `https://www.bilibili.com/video/${bvid}`}`);
+    } else {
+      await this.logTask(taskId, 'BILIBILI', 'INFO', 'B站上传已提交（审核中，链接待生成）');
+    }
+
+    return { success: true, taskId };
+  }
+
+  /**
+   * 解析 Cookie 输入，统一为 JSON 数组格式
+   *
+   * 支持两种输入：
+   * 1. 字符串格式："name1=value1; name2=value2"（浏览器 DevTools 复制格式）
+   * 2. JSON 数组格式：[{name, value, domain, path, ...}]
+   */
+  private parseCookies(input: string): BilibiliCookie[] {
+    const trimmed = input.trim();
+
+    // 尝试 JSON 数组格式
+    if (trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed.map((c: any) => ({
+            name: c.name,
+            value: c.value,
+            domain: c.domain || '.bilibili.com',
+            path: c.path || '/',
+            secure: c.secure !== false,
+            httpOnly: c.httpOnly || false,
+            sameSite: c.sameSite || 'Lax',
+            expirationDate: c.expirationDate,
+          }));
+        }
+      } catch {
+        // 不是有效 JSON，回退到字符串格式
+      }
+    }
+
+    // 字符串格式："name1=value1; name2=value2"
+    const cookies: BilibiliCookie[] = [];
+    const pairs = trimmed.split(';').map(p => p.trim()).filter(p => p);
+    for (const pair of pairs) {
+      const eqIndex = pair.indexOf('=');
+      if (eqIndex <= 0) continue;
+      const name = pair.substring(0, eqIndex).trim();
+      const value = pair.substring(eqIndex + 1).trim();
+      if (name && value) {
+        cookies.push({
+          name,
+          value,
+          domain: '.bilibili.com',
+          path: '/',
+          secure: true,
+          httpOnly: false,
+          sameSite: 'Lax',
+        });
+      }
+    }
+
+    return cookies;
+  }
+
+  private async logTask(taskId: string, phase: string, level: string, message: string): Promise<void> {
+    await this.env.DB.prepare(`
+      INSERT INTO operation_logs (task_id, phase, level, message, created_at)
+      VALUES (?, ?, ?, ?, STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    `).bind(taskId, phase, level, message).run();
+  }
+}
