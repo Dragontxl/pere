@@ -214,9 +214,9 @@ def generate_cover_image(
         block_h = len(lines) * line_height
         block_w = max((font.getlength(line) for line in lines), default=0)
 
-        # 文字块居中偏下（封面构图常用位置）
+        # 文字块完全居中（水平+垂直）
         block_x = (target_w - block_w) // 2
-        block_y = target_h - block_h - int(target_h * 0.08)
+        block_y = (target_h - block_h) // 2
 
         # 半透明深色底条：保证文字在任意背景上都醒目
         padding_x = 24
