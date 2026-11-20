@@ -962,73 +962,90 @@ class BilibiliUploader:
         self._handle_confirm_dialog()
         time.sleep(1)
 
-        # 找投稿按钮：CSS 选择器 → 文本搜索兜底（与参考项目一致）
-        submit_btn = None
-        submit_selectors = [
-            'button:has-text("立即投稿")',
-            'button:has-text("投稿")',
-            '.submit-btn',
-            '[class*="submit-btn"]',
-            '[class*="submit"]',
-        ]
-        for sel in submit_selectors:
-            submit_btn = self.page.query_selector(sel)
-            if submit_btn:
-                break
-
-        if not submit_btn:
-            # 文本搜索兜底：找任意可见元素包含"立即投稿"文本
-            btn_info = self.page.evaluate("""() => {
-                var els = document.querySelectorAll('span, button, a, div, p');
-                for (var el of els) {
+        # 找投稿按钮：精确文本匹配 + 滚动到视口中央
+        # 关键：按钮在页面最底部（y 可能 > 视口高度），不滚动到视口内则 mouse.click 点不中
+        btn_info_raw = self.page.evaluate("""() => {
+            var candidates = document.querySelectorAll('button, .bcc-button, [class*="btn"], [class*="submit"], span, div, a');
+            var best = null;
+            // 1) 精确文本 "立即投稿"
+            for (var el of candidates) {
+                var t = (el.textContent || '').trim();
+                if (t === '立即投稿' && el.offsetParent !== null && el.offsetWidth > 0 && el.offsetHeight > 0) {
+                    best = el; break;
+                }
+            }
+            // 2) 包含 "立即投稿"（短文本）
+            if (!best) {
+                for (var el of candidates) {
                     var t = (el.textContent || '').trim();
-                    if (t.indexOf('立即投稿') !== -1 && el.offsetParent !== null && el.offsetWidth > 0) {
-                        el.scrollIntoView({block: 'center'});
-                        var rect = el.getBoundingClientRect();
-                        return JSON.stringify({
-                            status: 'FOUND',
-                            x: rect.x + rect.width / 2,
-                            y: rect.y + rect.height / 2,
-                            text: t.substring(0, 30)
-                        });
+                    if (t.indexOf('立即投稿') !== -1 && t.length < 20 && el.offsetParent !== null && el.offsetWidth > 0) {
+                        best = el; break;
+                    }
+                }
+            }
+            if (!best) return JSON.stringify({status: 'NOT_FOUND'});
+            best.scrollIntoView({block: 'center', inline: 'center'});
+            var rect = best.getBoundingClientRect();
+            var disabled = best.disabled || best.classList.contains('disabled') || best.getAttribute('disabled') !== null;
+            return JSON.stringify({
+                status: 'FOUND',
+                text: best.textContent.trim().substring(0, 20),
+                tag: best.tagName,
+                className: (best.className || '').toString().substring(0, 60),
+                disabled: disabled,
+                x: rect.x + rect.width / 2,
+                y: rect.y + rect.height / 2,
+                vh: window.innerHeight
+            });
+        }""")
+        import json as _json
+        submit_info = _json.loads(btn_info_raw) if btn_info_raw else {"status": "NOT_FOUND"}
+        print(f"  📍 投稿按钮信息: {submit_info}")
+
+        if submit_info.get("status") != "FOUND":
+            raise RuntimeError("未找到投稿按钮")
+        if submit_info.get("disabled"):
+            form_errors = self._check_form_errors()
+            raise RuntimeError(f"投稿按钮禁用: {form_errors or '表单可能未填完整'}")
+
+        # 滚动后等待页面稳定
+        time.sleep(1)
+
+        # 优先用 Playwright element.click()（自动滚动 + 真实鼠标事件 + 可操作性检查）
+        clicked = False
+        try:
+            submit_btn = self.page.query_selector('button:has-text("立即投稿")')
+            if submit_btn:
+                submit_btn.click(timeout=10000)
+                clicked = True
+                print("  🖱️ 投稿按钮已点击（element.click）")
+        except Exception as e:
+            print(f"  ⚠️ element.click 失败: {e}，改用坐标点击")
+
+        if not clicked:
+            # 坐标点击兜底：再次滚动到视口中央后重新取坐标
+            idx = self.page.evaluate("""() => {
+                var candidates = document.querySelectorAll('button, [class*="btn"], span, div, a');
+                for (var el of candidates) {
+                    var t = (el.textContent || '').trim();
+                    if (t === '立即投稿' && el.offsetParent !== null && el.offsetWidth > 0) {
+                        el.scrollIntoView({block: 'center', inline: 'center'});
+                        var r = el.getBoundingClientRect();
+                        return JSON.stringify({x: r.x + r.width/2, y: r.y + r.height/2, vh: window.innerHeight});
                     }
                 }
                 return JSON.stringify({status: 'NOT_FOUND'});
             }""")
-            import json as _json
-            btn_info = _json.loads(btn_info)
-            if btn_info.get("status") == "FOUND":
-                self.page.mouse.move(btn_info["x"], btn_info["y"])
-                time.sleep(0.2)
-                self.page.mouse.click(btn_info["x"], btn_info["y"])
-                print(f"  🖱️ 投稿按钮已点击（文本搜索: {btn_info['text']}）")
-                time.sleep(5)
-                self._take_screenshot("after_submit")
-                # 处理二次确认弹窗
-                self._retry_handle_dialog(3)
-                return
-            raise RuntimeError("未找到投稿按钮")
-
-        # 检查是否 disabled
-        is_disabled = submit_btn.evaluate("el => el.disabled || el.classList.contains('disabled')")
-        if is_disabled:
-            # 检查表单是否有未填项
-            form_errors = self._check_form_errors()
-            if form_errors:
-                raise RuntimeError(f"投稿按钮禁用，表单未填完整: {form_errors}")
-            raise RuntimeError("投稿按钮处于禁用状态，可能表单未填完整")
-
-        # 用原生鼠标点击（JS click 不能触发 React onClick）
-        box = submit_btn.bounding_box()
-        if box:
-            cx = box["x"] + box["width"] / 2
-            cy = box["y"] + box["height"] / 2
-            self.page.mouse.move(cx, cy)
-            time.sleep(0.2)
-            self.page.mouse.click(cx, cy)
-            print("  🖱️ 投稿按钮已点击")
-        else:
-            submit_btn.click()
+            pos = _json.loads(idx)
+            if pos.get("status") == "NOT_FOUND":
+                raise RuntimeError("滚动后仍未找到投稿按钮")
+            print(f"  📍 点击坐标: ({pos['x']:.0f}, {pos['y']:.0f})，视口高 {pos['vh']}")
+            if pos["y"] > pos["vh"] or pos["y"] < 0:
+                raise RuntimeError(f"投稿按钮仍在视口外（y={pos['y']:.0f}, vh={pos['vh']}）")
+            self.page.mouse.move(pos["x"], pos["y"])
+            time.sleep(0.3)
+            self.page.mouse.click(pos["x"], pos["y"])
+            print("  🖱️ 投稿按钮已点击（坐标点击）")
 
         # 等 5 秒让确认弹窗出现
         time.sleep(5)
