@@ -182,12 +182,27 @@ class BilibiliUploader:
         from playwright.sync_api import sync_playwright
 
         self.playwright = sync_playwright().start()
-        self.browser = self.playwright.chromium.launch(headless=self.headless)
+        self.browser = self.playwright.chromium.launch(
+            headless=self.headless,
+            args=[
+                "--no-sandbox",
+                "--disable-gpu",
+                "--no-first-run",
+                "--no-default-browser-check",
+                "--start-maximized",
+                "--disable-background-networking",
+                "--disable-popup-blocking",
+            ],
+        )
         self.context = self.browser.new_context(
             viewport={"width": 1920, "height": 1080},
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         )
         self.page = self.context.new_page()
+        # 反检测：隐藏 navigator.webdriver，避免被B站识别为自动化浏览器
+        self.page.add_init_script(
+            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+        )
         print("  🚀 浏览器已启动")
 
     def _inject_cookies(self, cookies_json_path):
@@ -220,8 +235,8 @@ class BilibiliUploader:
 
     def _navigate(self):
         """打开投稿页"""
-        self.page.goto(self.UPLOAD_URL, wait_until="networkidle", timeout=30000)
-        time.sleep(2)
+        self.page.goto(self.UPLOAD_URL, wait_until="domcontentloaded", timeout=60000)
+        time.sleep(3)
         print(f"  🌐 已打开投稿页: {self.page.url}")
 
     def _check_login(self):
@@ -257,6 +272,7 @@ class BilibiliUploader:
     def _upload_video(self):
         """上传视频文件"""
         print("  📹 开始上传视频...")
+        time.sleep(3)
         # B站投稿页的视频上传 input 是隐藏的 file input
         selectors = [
             'input[type="file"][accept*="video"]',
@@ -273,9 +289,24 @@ class BilibiliUploader:
         if not file_input:
             raise RuntimeError("未找到视频上传 input 元素")
 
-        file_input.set_input_files(self.video_path)
+        # 让 input 可见（B站用 display:none 隐藏，需先暴露再 SetInputFiles）
+        file_input.evaluate("""() => {
+            this.style.display = 'block';
+            this.style.visibility = 'visible';
+            this.style.opacity = '1';
+            this.style.position = 'fixed';
+            this.style.top = '0';
+            this.style.left = '0';
+            this.style.width = '200px';
+            this.style.height = '50px';
+            this.style.zIndex = '99999';
+        }""")
+        time.sleep(0.5)
 
-        # 触发 React 事件（B站前端是 React，需要手动触发）
+        file_input.set_input_files(self.video_path)
+        print("  📁 set_input_files 已调用")
+
+        # 触发多种事件确保 B站 React 捕获（与参考项目一致）
         self.page.evaluate("""() => {
             const inputs = document.querySelectorAll('input[type="file"]');
             for (const input of inputs) {
@@ -283,10 +314,19 @@ class BilibiliUploader:
                 input.dispatchEvent(new Event('input', { bubbles: true }));
                 const reactPropsKey = Object.keys(input).find(k => k.startsWith('__reactProps$'));
                 if (reactPropsKey && input[reactPropsKey] && input[reactPropsKey].onChange) {
-                    input[reactPropsKey].onChange({ target: input, currentTarget: input });
+                    input[reactPropsKey].onChange({
+                        target: input,
+                        currentTarget: input,
+                        preventDefault: () => {},
+                        stopPropagation: () => {},
+                        nativeEvent: new Event('change'),
+                        persist: () => {},
+                        type: 'change'
+                    });
                 }
             }
         }""")
+        print("  ⚡ 已触发 change/input/React onChange 事件")
 
         # 等待上传完成（检测标题输入框出现或 URL 跳转）
         print("  ⏳ 等待视频上传完成...")
@@ -309,28 +349,80 @@ class BilibiliUploader:
         raise RuntimeError("视频上传超时（5 分钟）")
 
     def _handle_confirm_dialog(self):
-        """处理提示弹窗（确认/关闭类）"""
-        confirm_selectors = [
-            'button:has-text("确认")',
-            'button:has-text("确定")',
-            'button:has-text("继续")',
-        ]
-        close_selectors = [
-            'button:has-text("知道了")',
-            'button:has-text("暂不设置")',
-            'button:has-text("取消")',
-            'button:has-text("关闭")',
-        ]
-        for sel in close_selectors + confirm_selectors:
-            try:
-                el = self.page.query_selector(sel)
-                if el and el.is_visible():
-                    el.click(timeout=1500)
-                    print("  💬 已处理提示弹窗")
-                    time.sleep(1)
-                    return
-            except Exception:
-                continue
+        """处理提示弹窗（JS 检测 .bcc-dialog，优先关闭类按钮，用原生鼠标点击）"""
+        try:
+            info = self.page.evaluate("""() => {
+                var dialogs = document.querySelectorAll('.bcc-dialog, [class*="dialog-body"], [class*="modal-body"]');
+                var dialog = null;
+                for (var d of dialogs) {
+                    if (d.offsetParent !== null) { dialog = d; break; }
+                }
+                if (!dialog) {
+                    var wraps = document.querySelectorAll('.bcc-dialog__wrap, [class*="dialog-wrap"]');
+                    for (var w of wraps) {
+                        if (w.offsetParent !== null || getComputedStyle(w).display !== 'none') { dialog = w; break; }
+                    }
+                }
+                if (!dialog) return JSON.stringify({status: 'NO_DIALOG'});
+                var dialogText = dialog.textContent.trim().substring(0, 200);
+                var btns = dialog.querySelectorAll('button, .bcc-button, [class*="btn"], span[class*="submit"], a');
+                var visibleBtns = [];
+                for (var b of btns) {
+                    if (b.offsetParent !== null && b.offsetWidth > 0 && b.offsetHeight > 0) {
+                        visibleBtns.push(b);
+                    }
+                }
+                // 第1优先级：关闭类按钮
+                var closeKeywords = ['暂不设置', '稍后再说', '以后再说', '我知道了', '知道了', '关闭', '取消', '跳过', '暂不', '不用了'];
+                var targetBtn = null;
+                for (var b of visibleBtns) {
+                    var t = (b.textContent || '').trim();
+                    for (var kw of closeKeywords) {
+                        if (t.indexOf(kw) !== -1) { targetBtn = b; break; }
+                    }
+                    if (targetBtn) break;
+                }
+                // 第2优先级：确认类按钮
+                if (!targetBtn) {
+                    var confirmKeywords = ['确认', '确定', '是', '投稿', '同意', '继续', '好的', '完成', '去试试', '立即体验'];
+                    for (var b of visibleBtns) {
+                        var t = (b.textContent || '').trim();
+                        for (var kw of confirmKeywords) {
+                            if (t.indexOf(kw) !== -1) { targetBtn = b; break; }
+                        }
+                        if (targetBtn) break;
+                    }
+                }
+                // 第3优先级：只有一个可见按钮就用它
+                if (!targetBtn && visibleBtns.length === 1) { targetBtn = visibleBtns[0]; }
+                // 第4优先级：多个按钮取最后一个
+                if (!targetBtn && visibleBtns.length > 0) { targetBtn = visibleBtns[visibleBtns.length - 1]; }
+                if (!targetBtn) return JSON.stringify({status: 'NO_DIALOG', reason: 'no_visible_btns'});
+                targetBtn.scrollIntoView({block: 'center'});
+                var rect = targetBtn.getBoundingClientRect();
+                return JSON.stringify({
+                    status: 'FOUND',
+                    text: targetBtn.textContent.trim().substring(0, 30),
+                    x: rect.x + rect.width / 2,
+                    y: rect.y + rect.height / 2,
+                    dialogText: dialogText
+                });
+            }""")
+            if not info or "NO_DIALOG" in info:
+                return
+
+            import json as _json
+            btn = _json.loads(info)
+            print(f"  💬 检测到弹窗: {btn.get('dialogText', '')[:60]} | 按钮: {btn.get('text', '')}")
+
+            # 用原生鼠标点击（JS click 不能触发 React onClick）
+            self.page.mouse.move(btn["x"], btn["y"])
+            time.sleep(0.2)
+            self.page.mouse.click(btn["x"], btn["y"])
+            print("  ✅ 弹窗按钮已点击")
+            time.sleep(1)
+        except Exception:
+            pass
 
     def _upload_cover(self):
         """上传封面图片"""
@@ -339,24 +431,45 @@ class BilibiliUploader:
             return
 
         print("  🖼️ 开始上传封面...")
-        # 点击"添加封面"按钮
-        add_cover_selectors = [
-            'button:has-text("添加封面")',
-            '[class*="cover"]:has-text("添加")',
-            'span:has-text("添加封面")',
-        ]
-        clicked = False
-        for sel in add_cover_selectors:
-            try:
-                el = self.page.query_selector(sel)
-                if el and el.is_visible():
-                    el.click(timeout=3000)
-                    clicked = True
-                    break
-            except Exception:
-                continue
-
-        if not clicked:
+        # 用 JS 精确匹配"添加封面"按钮
+        res = self.page.evaluate("""() => {
+            var spans = document.querySelectorAll('span.add-text');
+            var btn = null;
+            for (var el of spans) {
+                var t = (el.textContent || '').trim();
+                if (t === '添加封面' && el.offsetParent !== null && el.offsetWidth > 0) {
+                    btn = el;
+                    break;
+                }
+            }
+            if (!btn) {
+                var all = document.querySelectorAll('span, div, button');
+                for (var el of all) {
+                    var t = (el.textContent || '').trim();
+                    if ((t === '添加封面' || t === '添加主封面') && el.offsetParent !== null && el.offsetWidth > 0 && el.offsetWidth < 200) {
+                        btn = el;
+                        break;
+                    }
+                }
+            }
+            if (!btn) return 'NO_BTN';
+            btn.scrollIntoView({block: 'center'});
+            var rect = btn.getBoundingClientRect();
+            return JSON.stringify({
+                status: 'FOUND',
+                x: rect.x + rect.width / 2,
+                y: rect.y + rect.height / 2
+            });
+        }""")
+        import json as _json
+        if res and "FOUND" in res:
+            btn = _json.loads(res)
+            # 用原生鼠标点击
+            self.page.mouse.move(btn["x"], btn["y"])
+            time.sleep(0.2)
+            self.page.mouse.click(btn["x"], btn["y"])
+            print("  ✅ 已点击添加封面按钮")
+        else:
             print("  ⚠️ 未找到添加封面按钮，尝试直接上传")
 
         time.sleep(1)
@@ -373,6 +486,17 @@ class BilibiliUploader:
                 break
 
         if image_input:
+            # 让 input 可见
+            image_input.evaluate("""() => {
+                this.style.display = 'block';
+                this.style.visibility = 'visible';
+                this.style.opacity = '1';
+                this.style.position = 'fixed';
+                this.style.top = '0';
+                this.style.left = '0';
+                this.style.zIndex = '99999';
+            }""")
+            time.sleep(0.3)
             image_input.set_input_files(self.cover_path)
             self.page.evaluate("""() => {
                 const inputs = document.querySelectorAll('input[type="file"]');
@@ -383,14 +507,7 @@ class BilibiliUploader:
             }""")
             time.sleep(2)
             # 点击"完成"按钮
-            for sel in ['button:has-text("完成")', 'button:has-text("确定")', 'button:has-text("确认")']:
-                try:
-                    el = self.page.query_selector(sel)
-                    if el and el.is_visible():
-                        el.click(timeout=2000)
-                        break
-                except Exception:
-                    continue
+            self._handle_confirm_dialog()
             print("  ✅ 封面已上传")
         else:
             print("  ⚠️ 未找到封面上传 input，跳过")
@@ -500,57 +617,100 @@ class BilibiliUploader:
                 print("  ⚠️ 简介填写失败，继续")
 
     def _select_ai_declaration(self):
-        """选择创作声明：含 AI 生成内容"""
+        """选择创作声明：点击下拉框→选"含AI生成内容"（与参考项目一致）"""
         print("  🤖 选择 AI 声明...")
-        for sel in [
-            'label:has-text("AI")',
-            '[class*="ai"]:has-text("AI生成")',
-            'label:has-text("含AI生成内容")',
-        ]:
-            try:
-                el = self.page.query_selector(sel)
-                if el and el.is_visible():
-                    el.click(timeout=2000)
-                    print("  ✅ 已选择 AI 声明")
-                    return
-            except Exception:
-                continue
-        # 尝试点击 checkbox
-        try:
-            checkbox = self.page.query_selector('input[type="checkbox"]')
-            if checkbox and checkbox.is_visible():
-                checkbox.check(timeout=2000)
-                print("  ✅ 已勾选 AI 声明复选框")
-                return
-        except Exception:
-            pass
-        print("  ⚠️ 未找到 AI 声明选项，跳过")
+        # 滚动到创作声明区域
+        self.page.evaluate("""() => {
+            var els = document.evaluate('//*[contains(text(),"创作声明")]', document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+            var el = els.singleNodeValue;
+            if (el && el.scrollIntoView) el.scrollIntoView({ block: 'center' });
+        }""")
+        time.sleep(1)
+
+        # 点击下拉框
+        res = self.page.evaluate("""() => {
+            var input = document.querySelector('input.bcc-select-input-inner[placeholder*="创作声明"]')
+                     || document.querySelector('input[placeholder*="创作声明"]');
+            if (!input) return 'NO_INPUT';
+            input.click();
+            input.focus();
+            return 'CLICKED';
+        }""")
+        print(f"  📋 AI声明下拉框: {res}")
+        time.sleep(1)
+
+        # 选择"含AI生成内容"
+        res2 = self.page.evaluate("""() => {
+            var spans = document.querySelectorAll('span');
+            for (var i = 0; i < spans.length; i++) {
+                if (spans[i].textContent && spans[i].textContent.indexOf('含AI生成内容') !== -1) {
+                    spans[i].click();
+                    return 'SELECTED';
+                }
+            }
+            return 'NOT_FOUND';
+        }""")
+        print(f"  ✅ AI声明选择: {res2}")
+        time.sleep(1)
+        if res2 != "SELECTED":
+            print("  ⚠️ 未找到 AI 声明选项，跳过")
 
     def _select_district(self):
-        """选择分区：资讯"""
+        """选择分区：资讯（JS 点击 select-controller→选"资讯"，与参考项目一致）"""
         print("  📂 选择分区...")
-        # 分区通常是下拉选择器
-        try:
-            district_input = self.page.query_selector(
-                '[class*="district"] input, [class*="partition"] input, select'
-            )
-            if district_input:
-                district_input.click()
-                time.sleep(1)
-                # 选择"资讯"
-                for sel in ['li:has-text("资讯")', 'option:has-text("资讯")', '[role="option"]:has-text("资讯")']:
-                    el = self.page.query_selector(sel)
-                    if el:
-                        el.click(timeout=2000)
-                        print("  ✅ 已选择分区：资讯")
-                        return
-        except Exception:
-            pass
-        print("  ⚠️ 未找到分区选择器，跳过")
+        # 滚动到分区区域
+        self.page.evaluate("""() => {
+            var els = document.evaluate('//*[contains(text(),"分区")]', document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+            var el = els.singleNodeValue;
+            if (el && el.scrollIntoView) el.scrollIntoView({ block: 'center' });
+        }""")
+        time.sleep(1)
+
+        # 检查当前分区，如果不是"资讯"则点击切换
+        res = self.page.evaluate("""() => {
+            var ctrl = document.querySelector('div.select-controller');
+            if (!ctrl) return 'NO_CONTROLLER';
+            var cur = ctrl.querySelector('p.select-item-cont');
+            if (cur && cur.textContent && cur.textContent.indexOf('资讯') !== -1) return 'ALREADY_NEWS';
+            ctrl.click();
+            return 'CLICKED';
+        }""")
+        print(f"  📂 分区控制器: {res}")
+        if res == "ALREADY_NEWS":
+            return
+        time.sleep(1)
+
+        # 选择"资讯"
+        res2 = self.page.evaluate("""() => {
+            var items = document.querySelectorAll('div[title="资讯"]');
+            if (items.length > 0) {
+                items[0].click();
+                return 'SELECTED';
+            }
+            var ps = document.querySelectorAll('p');
+            for (var i = 0; i < ps.length; i++) {
+                if (ps[i].textContent === '资讯') {
+                    ps[i].click();
+                    return 'SELECTED_P';
+                }
+            }
+            return 'NOT_FOUND';
+        }""")
+        print(f"  ✅ 分区选择: {res2}")
+        time.sleep(1)
+        if res2 == "NOT_FOUND":
+            print("  ⚠️ 未找到分区选择器，跳过")
 
     def _submit(self):
         """点击投稿按钮提交"""
         print("  📤 提交投稿...")
+        # 先关闭可能存在的弹窗（调用两次，可能有多层弹窗）
+        print("  🔍 检查并关闭已有弹窗...")
+        self._handle_confirm_dialog()
+        time.sleep(1)
+        self._handle_confirm_dialog()
+        time.sleep(1)
+
         # 找投稿按钮
         submit_selectors = [
             'button:has-text("立即投稿")',
@@ -575,13 +735,16 @@ class BilibiliUploader:
         # 用原生鼠标点击（JS click 不能触发 React onClick）
         box = submit_btn.bounding_box()
         if box:
-            self.page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+            cx = box["x"] + box["width"] / 2
+            cy = box["y"] + box["height"] / 2
+            self.page.mouse.move(cx, cy)
             time.sleep(0.2)
-            self.page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+            self.page.mouse.click(cx, cy)
+            print("  🖱️ 投稿按钮已点击")
         else:
             submit_btn.click()
 
-        time.sleep(2)
+        time.sleep(3)
         # 处理二次确认弹窗
         self._handle_confirm_dialog()
 
@@ -607,8 +770,8 @@ class BilibiliUploader:
                 if uid:
                     space_url = self.SPACE_URL_TEMPLATE.format(uid=uid)
                     space_page = self.context.new_page()
-                    space_page.goto(space_url, wait_until="networkidle", timeout=30000)
-                    time.sleep(2)
+                    space_page.goto(space_url, wait_until="domcontentloaded", timeout=60000)
+                    time.sleep(3)
 
                     # 查找标题匹配的视频链接
                     links = space_page.query_selector_all("a[href*='/video/BV']")
