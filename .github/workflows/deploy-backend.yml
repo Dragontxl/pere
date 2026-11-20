@@ -46,6 +46,23 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: npx wrangler d1 execute pexel-remotion-db --file=./src/database/schema.sql --remote
 
+      # schema.sql 只用 CREATE TABLE IF NOT EXISTS，无法给已存在的表补列。
+      # 这里逐条执行 ALTER TABLE，已存在时 wrangler 会报错，用 || 忽略即可保持幂等。
+      - name: 应用增量迁移（幂等）
+        working-directory: backend
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set +e
+          while IFS= read -r stmt; do
+            stmt="$(echo "$stmt" | sed 's/[[:space:]]*$//')"
+            [ -z "$stmt" ] && continue
+            case "$stmt" in --*) continue ;; esac
+            npx wrangler d1 execute pexel-remotion-db --remote --command "$stmt" >/dev/null 2>&1 \
+              && echo "applied: $stmt" \
+              || echo "skip (already applied): $stmt"
+          done < src/database/migrations/2026-11-20-tts-options.sql
+
       - name: 部署到 Cloudflare Workers
         working-directory: backend
         env:

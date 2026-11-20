@@ -2,6 +2,11 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { taskApi, bgmApi, fileApi } from '../api/client';
 import type { BgmOption } from '../types';
+import {
+  ZH_TTS_VOICES,
+  EN_TTS_VOICES,
+  TTS_SPEED_OPTIONS,
+} from '../constants/tts';
 
 type ArticleMode = 'ai' | 'paste' | 'upload';
 
@@ -14,6 +19,9 @@ export default function CreateTask() {
   const [orientation, setOrientation] = useState('landscape');
   const [language, setLanguage] = useState('zh');
   const [enableSubtitle, setEnableSubtitle] = useState(true);
+  const [enableOutro, setEnableOutro] = useState(true);
+  const [ttsVoice, setTtsVoice] = useState('');
+  const [ttsSpeed, setTtsSpeed] = useState(1.0);
   const [bilibiliUpload, setBilibiliUpload] = useState(false);
   const [bgmKey, setBgmKey] = useState('');
   const [bgmOptions, setBgmOptions] = useState<BgmOption[]>([]);
@@ -107,6 +115,9 @@ export default function CreateTask() {
         orientation,
         language,
         enable_subtitle: enableSubtitle,
+        enable_outro: enableOutro,
+        tts_voice: ttsVoice || undefined,
+        tts_speed: ttsSpeed,
         bgm_key: customBgmKey || bgmKey || undefined,
         bilibili_upload: bilibiliUpload,
       });
@@ -248,11 +259,48 @@ export default function CreateTask() {
               <label>文章语言</label>
               <select
                 value={language}
-                onChange={(e) => setLanguage(e.target.value)}
+                onChange={(e) => {
+                  setLanguage(e.target.value);
+                  // 语言切换后音色可能不再匹配，重置为「跟随语言」
+                  setTtsVoice('');
+                }}
               >
                 <option value="zh">中文</option>
                 <option value="en">English</option>
               </select>
+            </div>
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label>TTS 音色</label>
+              <select
+                value={ttsVoice}
+                onChange={(e) => setTtsVoice(e.target.value)}
+              >
+                <option value="">跟随语言（默认）</option>
+                {(language === 'en' ? EN_TTS_VOICES : ZH_TTS_VOICES).map((v) => (
+                  <option key={v.value} value={v.value}>
+                    {v.label}
+                  </option>
+                ))}
+              </select>
+              <p className="form-hint">留空则按文章语言自动选择音色</p>
+            </div>
+
+            <div className="form-group">
+              <label>语速</label>
+              <select
+                value={ttsSpeed}
+                onChange={(e) => setTtsSpeed(Number(e.target.value))}
+              >
+                {TTS_SPEED_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              <p className="form-hint">语速越快，成片时长越短</p>
             </div>
           </div>
 
@@ -264,6 +312,17 @@ export default function CreateTask() {
                 onChange={(e) => setEnableSubtitle(e.target.checked)}
               />
               <span>添加字幕</span>
+            </label>
+          </div>
+
+          <div className="form-group checkbox-group">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={enableOutro}
+                onChange={(e) => setEnableOutro(e.target.checked)}
+              />
+              <span>添加片尾</span>
             </label>
           </div>
 

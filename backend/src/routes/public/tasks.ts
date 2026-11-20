@@ -61,6 +61,9 @@ taskRoutes.post('/', async (c) => {
       orientation: body.orientation || 'landscape',
       language: body.language || 'zh',
       enableSubtitle: body.enable_subtitle !== false,
+      enableOutro: body.enable_outro !== false,
+      ttsVoice: body.tts_voice || null,
+      ttsSpeed: typeof body.tts_speed === 'number' ? body.tts_speed : 1.0,
       bgmKey: body.bgm_key || null,
       bilibiliUpload: body.bilibili_upload === true,
     });

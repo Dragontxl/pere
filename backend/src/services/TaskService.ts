@@ -58,11 +58,17 @@ export class TaskService {
     orientation: string;
     language: string;
     enableSubtitle: boolean;
+    enableOutro?: boolean;
+    ttsVoice?: string | null;
+    ttsSpeed?: number;
     bgmKey?: string | null;
     bilibiliUpload?: boolean;
   }): Promise<Task> {
     const now = new Date().toISOString();
     const bgmName = findBgmName(data.bgmKey);
+    // 音色名称仅允许字母/数字/连字符（如 zh-CN-YunjianNeural），非法值回退为自动选择
+    const rawVoice = (data.ttsVoice || '').trim();
+    const ttsVoice = /^[A-Za-z0-9-]{1,64}$/.test(rawVoice) ? rawVoice : null;
     const task: Task = {
       id: this.generateUUID(data.title || 'video'),
       user_id: data.userId,
@@ -73,6 +79,9 @@ export class TaskService {
       orientation: data.orientation || 'landscape',
       language: data.language || 'zh',
       enable_subtitle: data.enableSubtitle !== false,
+      enable_outro: data.enableOutro !== false,
+      tts_voice: ttsVoice,
+      tts_speed: Math.min(2.0, Math.max(0.5, Number(data.ttsSpeed) || 1.0)),
       bgm_key: data.bgmKey || null,
       bgm_name: bgmName,
       bilibili_upload: data.bilibiliUpload === true,
@@ -107,13 +116,14 @@ export class TaskService {
     await this.env.DB.prepare(`
       INSERT INTO tasks (
         id, user_id, title, article_source, article_content, article_file_key,
-        orientation, language, enable_subtitle, bgm_key, bgm_name,
+        orientation, language, enable_subtitle, enable_outro, tts_voice, tts_speed,
+        bgm_key, bgm_name,
         bilibili_upload, bilibili_status, bilibili_bvid, bilibili_url,
         status, current_phase, progress,
         retry_count, max_retries, processed_frames, total_frames, failed_frames,
         start_phase, end_phase, phase_details,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       task.id,
       task.user_id,
@@ -124,6 +134,9 @@ export class TaskService {
       task.orientation,
       task.language,
       task.enable_subtitle,
+      task.enable_outro,
+      task.tts_voice,
+      task.tts_speed,
       task.bgm_key,
       task.bgm_name,
       task.bilibili_upload,
@@ -334,7 +347,10 @@ export class TaskService {
           article_file_key: task.article_file_key || '',
           orientation: task.orientation,
           language: task.language,
-          enable_subtitle: task.enable_subtitle,
+          enable_subtitle: !!task.enable_subtitle,
+          enable_outro: !!task.enable_outro,
+          tts_voice: task.tts_voice || '',
+          tts_speed: task.tts_speed ?? 1.0,
           bgm_key: task.bgm_key || '',
           start_phase: rangeStart,
           end_phase: rangeEnd,
@@ -506,7 +522,10 @@ export class TaskService {
           article_file_key: task.article_file_key || '',
           orientation: task.orientation,
           language: task.language,
-          enable_subtitle: task.enable_subtitle,
+          enable_subtitle: !!task.enable_subtitle,
+          enable_outro: !!task.enable_outro,
+          tts_voice: task.tts_voice || '',
+          tts_speed: task.tts_speed ?? 1.0,
           bgm_key: task.bgm_key || '',
           start_phase: 'VIDEO_COMPOSE',
           end_phase: 'VIDEO_COMPOSE',

@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { taskApi, fileApi } from '../api/client';
 import type { Task, TaskLog, TaskPhase, PhaseMaterialCheck } from '../types';
 import { statusLabels, phaseLabels, phaseOrder } from '../types';
+import { voiceLabel } from '../constants/tts';
 import ProgressBar from '../components/ProgressBar';
 
 export default function TaskDetail() {
@@ -529,6 +530,20 @@ export default function TaskDetail() {
               <div className="info-item">
                 <span className="info-label">字幕</span>
                 <span className="info-value">{task.enable_subtitle ? '已启用' : '未启用'}</span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">片尾</span>
+                <span className="info-value">{task.enable_outro === false ? '未添加' : '已添加'}</span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">音色</span>
+                <span className="info-value">{voiceLabel(task.tts_voice, task.language)}</span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">语速</span>
+                <span className="info-value">
+                  {`${Number(task.tts_speed ?? 1).toFixed(2).replace(/\.?0+$/, '')}x`}
+                </span>
               </div>
               <div className="info-item">
                 <span className="info-label">背景音乐</span>

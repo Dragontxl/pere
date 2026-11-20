@@ -49,6 +49,9 @@ export interface Task {
   orientation: string;
   language: string;
   enable_subtitle: boolean;
+  enable_outro: boolean;
+  tts_voice: string | null;
+  tts_speed: number;
   bgm_key: string | null;
   bgm_name: string | null;
   status: string;

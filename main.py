@@ -31,7 +31,7 @@ from core.article_chunker import split_into_chunks
 from core.remotion_analyzer import analyze_scenes
 from core.decision_engine import decide_scenes, SceneDecision
 from core.composer.image_to_clip import image_to_clip
-from core.composer.tts_synthesis import synthesize_speech
+from core.composer.tts_synthesis import synthesize_speech, set_tts_overrides
 from core.composer.video_merger import merge_clips
 from core.composer.subtitle_overlay import add_subtitles
 from core.composer.cover_generator import generate_cover_image
@@ -158,6 +158,23 @@ def parse_args():
         "--no-subtitle",
         action="store_true",
         help="不添加字幕（默认每条 clip 都会烧录字幕）"
+    )
+    parser.add_argument(
+        "--no-outro",
+        action="store_true",
+        help="不追加固定片尾（默认追加片尾）"
+    )
+    parser.add_argument(
+        "--tts-voice",
+        type=str,
+        default=None,
+        help="TTS 音色名称（默认按文章语言自动选择）"
+    )
+    parser.add_argument(
+        "--tts-speed",
+        type=float,
+        default=None,
+        help="TTS 语速倍率（默认 1.0）"
     )
     parser.add_argument(
         "--bgm",
@@ -575,6 +592,10 @@ def _append_outro_clip(
         api_key: Pexels API key（本地片尾图片缺失时下载用）
         language: 语音语言
     """
+    if getattr(globals().get("args"), "no_outro", False):
+        print("  ⏭️ 已按任务设置跳过片尾")
+        return
+
     try:
         from core.composer.outro_video import generate_outro_clip
 
@@ -2709,6 +2730,13 @@ def main():
     if args.language is None:
         args.language = config.get("tts_language", "zh")
     print(f"🌐 文章语言: {args.language}（{'中文' if args.language == 'zh' else '英文'}）")
+
+    # TTS 音色/语速：任务创建时用户选择的参数优先于全局配置
+    set_tts_overrides(voice=args.tts_voice, speed=args.tts_speed)
+    if args.tts_voice:
+        print(f"🎙️ TTS 音色: {args.tts_voice}")
+    if args.tts_speed:
+        print(f"🎙️ TTS 语速: {args.tts_speed}x")
 
     model = config.get("model_name", "agnes-3.0-flash")
 

@@ -27,6 +27,29 @@ DEFAULT_TTS_CONFIG = {
     "tts_pitch": 1.0,
 }
 
+# 任务级覆盖值（由 CLI 参数设置，仅影响本次进程）
+# 优先级：CLI 覆盖 > 环境变量/settings.json > 默认值
+_VOICE_OVERRIDE: str | None = None
+_SPEED_OVERRIDE: float | None = None
+
+
+def set_tts_overrides(voice: str | None = None, speed: float | None = None) -> None:
+    """设置本次运行的 TTS 音色/语速覆盖值
+
+    任务创建时用户选择的音色与语速通过 CLI 参数传入，在此覆盖
+    settings.json / 环境变量中的全局配置。
+
+    Args:
+        voice: 音色名称，None 或空字符串表示沿用按语言自动选择的音色
+        speed: 语速倍率，None 表示沿用配置值
+    """
+    global _VOICE_OVERRIDE, _SPEED_OVERRIDE
+    _VOICE_OVERRIDE = (voice or "").strip() or None
+    try:
+        _SPEED_OVERRIDE = float(speed) if speed not in (None, "") else None
+    except (TypeError, ValueError):
+        _SPEED_OVERRIDE = None
+
 
 def _get_tts_config() -> dict:
     """加载 TTS 配置
@@ -50,6 +73,12 @@ def _get_tts_config() -> dict:
     env_key = os.environ.get("TTS_API_KEY")
     if env_key:
         tts_config["tts_api_key"] = env_key
+
+    # 任务级覆盖（用户创建任务时选择的音色/语速）
+    if _VOICE_OVERRIDE:
+        tts_config["tts_voice"] = _VOICE_OVERRIDE
+    if _SPEED_OVERRIDE is not None:
+        tts_config["tts_speed"] = _SPEED_OVERRIDE
 
     return tts_config
 
@@ -88,8 +117,12 @@ def _call_tts_api(text: str, output_path: str, tts_config: dict,
     """
     import time
 
+    global _VOICE_OVERRIDE
+
     voice = tts_config.get("tts_voice") or _select_voice(language)
     speed = float(tts_config.get("tts_speed", 1.0))
+    # 防御：极端语速会被 TTS 服务拒绝，限制在合理区间
+    speed = min(4.0, max(0.25, speed))
     pitch = float(tts_config.get("tts_pitch", 1.0))
     api_url = tts_config["tts_api_url"]
     api_key = tts_config["tts_api_key"]
@@ -126,6 +159,18 @@ def _call_tts_api(text: str, output_path: str, tts_config: dict,
             print(f"  ✅ 语音合成完成: {output_path} ({len(resp.content) / 1024:.1f} KB)")
             return True
         except requests.exceptions.HTTPError as e:
+            # 自定义音色可能不被服务端支持：回退到按语言选择的默认音色再试
+            if (
+                e.response is not None
+                and e.response.status_code in (400, 404, 422)
+                and voice != _select_voice(language)
+            ):
+                print(f"  ⚠️ 音色 {voice} 不可用，回退默认音色 {_select_voice(language)}")
+                # 记住回退结果，避免后续每个片段都重复失败一次
+                _VOICE_OVERRIDE = None
+                voice = _select_voice(language)
+                request_body["voice"] = voice
+                continue
             if attempt < max_retries - 1:
                 wait = 3 * (attempt + 1)
                 print(f"  ⚠️ 语音合成失败（第 {attempt + 1} 次），{wait}秒后重试...")

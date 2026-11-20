@@ -94,6 +94,9 @@ export const taskApi = {
     orientation: string;
     language: string;
     enable_subtitle: boolean;
+    enable_outro?: boolean;
+    tts_voice?: string;
+    tts_speed?: number;
     bgm_key?: string;
     bilibili_upload?: boolean;
   }): Promise<Task> {

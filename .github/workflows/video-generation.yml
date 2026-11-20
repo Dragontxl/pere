@@ -73,6 +73,22 @@ on:
         options:
           - 'true'
           - 'false'
+      enable_outro:
+        description: '是否追加固定片尾'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+      tts_voice:
+        description: 'TTS 音色（留空按语言自动选择）'
+        required: false
+        type: string
+      tts_speed:
+        description: 'TTS 语速倍率（默认 1.0）'
+        required: false
+        type: string
       bgm_key:
         description: '背景音乐 Key（bgm/xxx 为自定义，其他为预设）'
         required: false
@@ -92,6 +108,9 @@ env:
   # 从 workflow_dispatch 或 repository_dispatch 中提取公共参数
   TASK_ID: ${{ github.event.inputs.task_id || github.event.client_payload.task.task_id || '' }}
   ENABLE_SUBTITLE: ${{ github.event.inputs.enable_subtitle || github.event.client_payload.task.enable_subtitle || 'true' }}
+  ENABLE_OUTRO: ${{ github.event.inputs.enable_outro || github.event.client_payload.task.enable_outro || 'true' }}
+  TTS_VOICE: ${{ github.event.inputs.tts_voice || github.event.client_payload.task.tts_voice || '' }}
+  TTS_SPEED: ${{ github.event.inputs.tts_speed || github.event.client_payload.task.tts_speed || '1.0' }}
   BGM_KEY: ${{ github.event.inputs.bgm_key || github.event.client_payload.task.bgm_key || '' }}
   LANGUAGE: ${{ github.event.inputs.language || github.event.client_payload.task.language || 'zh' }}
   ORIENTATION: ${{ github.event.inputs.orientation || github.event.client_payload.task.orientation || 'landscape' }}
@@ -199,6 +218,9 @@ jobs:
             orientation=$(echo "$task_obj" | python3 -c "import sys,json; print(json.load(sys.stdin).get('orientation','landscape'))")
             language=$(echo "$task_obj" | python3 -c "import sys,json; print(json.load(sys.stdin).get('language','zh'))")
             enable_subtitle=$(echo "$task_obj" | python3 -c "import sys,json; print(json.load(sys.stdin).get('enable_subtitle','true'))")
+            enable_outro=$(echo "$task_obj" | python3 -c "import sys,json; print(json.load(sys.stdin).get('enable_outro','true'))")
+            tts_voice=$(echo "$task_obj" | python3 -c "import sys,json; print(json.load(sys.stdin).get('tts_voice','') or '')")
+            tts_speed=$(echo "$task_obj" | python3 -c "import sys,json; print(json.load(sys.stdin).get('tts_speed',1.0) or 1.0)")
             bgm_key=$(echo "$task_obj" | python3 -c "import sys,json; print(json.load(sys.stdin).get('bgm_key',''))")
             start_phase=$(echo "$task_obj" | python3 -c "import sys,json; print(json.load(sys.stdin).get('start_phase','ARTICLE_PARSE'))")
             end_phase=$(echo "$task_obj" | python3 -c "import sys,json; print(json.load(sys.stdin).get('end_phase','VIDEO_COMPOSE'))")
@@ -212,6 +234,9 @@ jobs:
             orientation="${{ inputs.orientation }}"
             language="${{ inputs.language }}"
             enable_subtitle="${{ inputs.enable_subtitle }}"
+            enable_outro="${{ inputs.enable_outro }}"
+            tts_voice="${{ inputs.tts_voice }}"
+            tts_speed="${{ inputs.tts_speed }}"
             bgm_key="${{ inputs.bgm_key }}"
             start_phase="${{ inputs.start_phase }}"
             end_phase="${{ inputs.end_phase }}"
@@ -226,11 +251,21 @@ jobs:
           [ -z "$end_phase" ] && end_phase="VIDEO_COMPOSE"
           [ -z "$bgm_key" ] && bgm_key=""
           [ -z "$rerender_clips" ] && rerender_clips=""
-          if [ "$enable_subtitle" = "false" ] || [ "$enable_subtitle" = "False" ]; then
+          if [ "$enable_subtitle" = "false" ] || [ "$enable_subtitle" = "False" ] || [ "$enable_subtitle" = "0" ]; then
             enable_subtitle="false"
           else
             enable_subtitle="true"
           fi
+          if [ "$enable_outro" = "false" ] || [ "$enable_outro" = "False" ] || [ "$enable_outro" = "0" ]; then
+            enable_outro="false"
+          else
+            enable_outro="true"
+          fi
+          # 语速兜底：非数字回退 1.0，并限制在 0.5 ~ 2.0
+          case "$tts_speed" in
+            ''|*[!0-9.]*) tts_speed="1.0" ;;
+          esac
+          tts_speed=$(awk -v v="$tts_speed" 'BEGIN{v=v+0; if(v<0.5)v=0.5; if(v>2.0)v=2.0; printf "%.2f", v}')
 
           # 写入环境变量
           echo "TASK_ID=$task_id" >> $GITHUB_ENV
@@ -242,6 +277,9 @@ jobs:
           echo "ORIENTATION=$orientation" >> $GITHUB_ENV
           echo "LANGUAGE=$language" >> $GITHUB_ENV
           echo "ENABLE_SUBTITLE=$enable_subtitle" >> $GITHUB_ENV
+          echo "ENABLE_OUTRO=$enable_outro" >> $GITHUB_ENV
+          echo "TTS_VOICE=$tts_voice" >> $GITHUB_ENV
+          echo "TTS_SPEED=$tts_speed" >> $GITHUB_ENV
           echo "BGM_KEY=$bgm_key" >> $GITHUB_ENV
           echo "START_PHASE=$start_phase" >> $GITHUB_ENV
           echo "END_PHASE=$end_phase" >> $GITHUB_ENV
@@ -262,6 +300,9 @@ jobs:
           echo "task_id=$task_id" >> $GITHUB_OUTPUT
           echo "rerender_clips=$rerender_clips" >> $GITHUB_OUTPUT
           echo "enable_subtitle=$enable_subtitle" >> $GITHUB_OUTPUT
+          echo "enable_outro=$enable_outro" >> $GITHUB_OUTPUT
+          echo "tts_voice=$tts_voice" >> $GITHUB_OUTPUT
+          echo "tts_speed=$tts_speed" >> $GITHUB_OUTPUT
           echo "bgm_key=$bgm_key" >> $GITHUB_OUTPUT
           echo "language=$language" >> $GITHUB_OUTPUT
           echo "title=$title" >> $GITHUB_OUTPUT
@@ -330,6 +371,11 @@ jobs:
           R2_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # 显式取自参数归一化步骤，避免与顶层 env 的同名变量产生歧义
+          ENABLE_SUBTITLE: ${{ steps.params.outputs.enable_subtitle }}
+          ENABLE_OUTRO: ${{ steps.params.outputs.enable_outro }}
+          TTS_VOICE: ${{ steps.params.outputs.tts_voice }}
+          TTS_SPEED: ${{ steps.params.outputs.tts_speed }}
         shell: bash
         run: |
           cmd=(
@@ -357,6 +403,18 @@ jobs:
 
           if [ "$ENABLE_SUBTITLE" = "false" ]; then
             cmd+=("--no-subtitle")
+          fi
+
+          if [ "$ENABLE_OUTRO" = "false" ]; then
+            cmd+=("--no-outro")
+          fi
+
+          if [ -n "$TTS_VOICE" ]; then
+            cmd+=("--tts-voice" "$TTS_VOICE")
+          fi
+
+          if [ -n "$TTS_SPEED" ]; then
+            cmd+=("--tts-speed" "$TTS_SPEED")
           fi
 
           if [ -n "$RERENDER_CLIPS" ]; then
@@ -436,6 +494,9 @@ jobs:
       task_id: ${{ steps.params.outputs.task_id }}
       rerender_clips: ${{ steps.params.outputs.rerender_clips }}
       enable_subtitle: ${{ steps.params.outputs.enable_subtitle }}
+      enable_outro: ${{ steps.params.outputs.enable_outro }}
+      tts_voice: ${{ steps.params.outputs.tts_voice }}
+      tts_speed: ${{ steps.params.outputs.tts_speed }}
       bgm_key: ${{ steps.params.outputs.bgm_key }}
       language: ${{ steps.params.outputs.language }}
       title: ${{ steps.params.outputs.title }}
@@ -701,6 +762,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           ENABLE_SUBTITLE: ${{ needs.pipeline.outputs.enable_subtitle }}
+          ENABLE_OUTRO: ${{ needs.pipeline.outputs.enable_outro }}
           BGM_KEY: ${{ needs.pipeline.outputs.bgm_key }}
           LANGUAGE: ${{ needs.pipeline.outputs.language }}
           TITLE: ${{ needs.pipeline.outputs.title }}
@@ -725,6 +787,10 @@ jobs:
 
           if [ "$ENABLE_SUBTITLE" = "false" ]; then
             cmd+=("--no-subtitle")
+          fi
+
+          if [ "$ENABLE_OUTRO" = "false" ]; then
+            cmd+=("--no-outro")
           fi
 
           if [ -n "$BGM_KEY" ]; then
