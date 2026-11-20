@@ -2896,6 +2896,22 @@ def main():
             }
 
         try:
+            # 通知前端进入「视频拼接」子阶段（否则渲染结束后进度条会一直停在渲染完成）
+            if args.task_id:
+                send_callback(
+                    {
+                        "task_id": args.task_id,
+                        "phase": "VIDEO_COMPOSE",
+                        "status": "processing",
+                        "message": "开始下载片段并拼接视频",
+                        "processed_count": 0,
+                        "total_count": 0,
+                        "sub_phase": "ASSEMBLY",
+                    },
+                    args.callback_url,
+                    args.callback_secret,
+                )
+
             final_output = assemble_from_r2(
                 render_params, work_dir,
                 args.r2_prefix, r2_config, args.task_id,

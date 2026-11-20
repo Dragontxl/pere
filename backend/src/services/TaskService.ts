@@ -716,6 +716,14 @@ export class TaskService {
     // These counters represent the current phase's latest values, NOT cumulative
     // across callbacks. Each callback reports the current processed/total/failed
     // for the phase; per-phase history is preserved in phase_details JSON.
+    // 拼接阶段没有逐片段计数器，此时沿用渲染阶段的计数，避免「已完成片段」被清零。
+    let frameProcessed = processedCount || 0;
+    let frameTotal = totalCount || 0;
+    if (phase === 'VIDEO_COMPOSE' && subPhase === 'ASSEMBLY' && frameTotal === 0) {
+      frameProcessed = currentDetail.render?.processed || 0;
+      frameTotal = currentDetail.render?.total || 0;
+    }
+
     await this.env.DB.prepare(`
       UPDATE tasks SET
         progress = MIN(MAX(progress, ?), 99),
@@ -730,7 +738,7 @@ export class TaskService {
       WHERE id = ? AND ${terminalStatusClause}
     `).bind(
       progress, phase, runningStatus, message || null,
-      processedCount || 0, totalCount || 0, failedCount || 0,
+      frameProcessed, frameTotal, failedCount || 0,
       JSON.stringify(phaseDetails), taskId
     ).run();
 

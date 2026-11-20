@@ -566,6 +566,18 @@ body {
   opacity: 0.6;
 }
 
+/* 视频合成的子步骤（视频渲染 / 视频拼接），缩进以体现层级 */
+.phase-step.sub-step {
+  background: #f8fafc;
+  border-left: 3px solid var(--color-primary);
+}
+
+.phase-step.sub-step .phase-indicator {
+  width: 22px;
+  height: 22px;
+  font-size: 0.7rem;
+}
+
 .phase-indicator {
   width: 28px;
   height: 28px;
