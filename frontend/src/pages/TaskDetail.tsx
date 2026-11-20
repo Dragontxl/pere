@@ -149,7 +149,7 @@ export default function TaskDetail() {
     }
   };
 
-  // Re-render clips handler
+  // Re-render clips handler（前端入口已下线；后端接口与管线逻辑保留）
   const handleRerender = async () => {
     if (!id || !task) return;
     if (!rerenderScenes.trim()) {
@@ -391,52 +391,8 @@ export default function TaskDetail() {
             </div>
           </div>
 
-          {/* Re-render clips */}
-          <div className="card">
-            <h2 className="card-title">片段重渲染</h2>
-            <p className="card-hint">
-              重新渲染指定场景的片段并重新拼接。未指定的场景将复用已缓存的片段。
-            </p>
-            <div className="rerender-form">
-              <div className="form-group">
-                <label className="form-label">场景 ID</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="如 3,7,12 或 3-7"
-                  value={rerenderScenes}
-                  onChange={(e) => setRerenderScenes(e.target.value)}
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">替换素材（可选，格式 scene_id:path，多个用 ; 分隔）</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="如 5:/path/img.jpg"
-                  value={rerenderImages}
-                  onChange={(e) => setRerenderImages(e.target.value)}
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">修改类型（可选，格式 scene_id:type，多个用 ; 分隔）</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="如 8:data_visual"
-                  value={rerenderTypes}
-                  onChange={(e) => setRerenderTypes(e.target.value)}
-                />
-              </div>
-              <button
-                className="btn btn-primary"
-                onClick={handleRerender}
-                disabled={rerendering}
-              >
-                {rerendering ? '重渲染中...' : '重渲染片段'}
-              </button>
-            </div>
-          </div>
+          {/* 片段重渲染入口已暂时下线；后端 /tasks/:id/rerender-clips 与
+              main.py --rerender-clips 逻辑保留，需要时恢复此卡片即可。 */}
 
           {/* Video cover — shown when the pipeline produced a cover image */}
           {coverUrl && (
