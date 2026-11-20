@@ -110,6 +110,19 @@ export default function TaskDetail() {
 
   const handleUploadBilibili = async () => {
     if (!task) return;
+
+    // 已有上传记录（成功/失败/进行中）时，弹出确认提示，由用户决定是否重新上传
+    if (task.bilibili_status) {
+      const statusLabel =
+        task.bilibili_status === 'success'
+          ? '已成功上传到B站'
+          : task.bilibili_status === 'failed'
+            ? '上次上传B站失败'
+            : 'B站上传正在进行中';
+      const proceed = window.confirm(`该任务${statusLabel}，确定要重新上传吗？`);
+      if (!proceed) return;
+    }
+
     setBilibiliUploading(true);
     try {
       await taskApi.uploadBilibili(task.id);
@@ -436,11 +449,7 @@ export default function TaskDetail() {
                 <button
                   className="btn btn-secondary"
                   onClick={handleUploadBilibili}
-                  disabled={
-                    bilibiliUploading ||
-                    task.bilibili_status === 'pending' ||
-                    task.bilibili_status === 'uploading'
-                  }
+                  disabled={bilibiliUploading}
                 >
                   {bilibiliUploading ? '触发中...' : '📺 上传B站'}
                 </button>
