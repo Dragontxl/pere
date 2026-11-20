@@ -583,33 +583,76 @@ class BilibiliUploader:
                     pass
 
     def _fill_description(self):
-        """填写简介（Quill 富文本编辑器）"""
+        """填写简介（Quill 富文本编辑器）
+
+        参考项目对齐：优先 JS 直接赋值 innerText + 派发 input 事件（Quill 监听 input），
+        keyboard.type 作为兜底。
+        """
         print("  📝 填写简介...")
         for attempt in range(3):
             try:
-                # 简介是 Quill 编辑器（contenteditable）
-                editor = None
-                for sel in [
-                    '.ql-editor[contenteditable="true"]',
-                    '[contenteditable="true"]',
-                    '.ql-editor',
-                ]:
-                    editor = self.page.query_selector(sel)
-                    if editor:
-                        break
+                # 找 Quill 编辑器
+                editor_info = self.page.evaluate("""() => {
+                    var sel = '.ql-editor[contenteditable="true"]';
+                    var el = document.querySelector(sel);
+                    if (!el) {
+                        sel = '.ql-editor';
+                        el = document.querySelector(sel);
+                    }
+                    if (!el) return JSON.stringify({found: false});
+                    el.scrollIntoView({block: 'center'});
+                    el.focus();
+                    // 清空已有内容
+                    el.innerText = '';
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                    return JSON.stringify({found: true, sel: sel});
+                }""")
+                import json as _json
+                editor_found = _json.loads(editor_info)
 
-                if editor:
-                    editor.click()
-                    # 使用 keyboard 输入（Quill 需要模拟键盘事件）
-                    self.page.keyboard.type(self.description, delay=10)
+                if editor_found.get("found"):
+                    # JS 直接赋值 + input 事件（Quill 监听 input 事件来同步内容）
+                    res = self.page.evaluate("""(desc) => {
+                        var el = document.querySelector('.ql-editor[contenteditable="true"]');
+                        if (!el) return 'NO_EDITOR';
+                        el.focus();
+                        el.innerText = desc;
+                        el.dispatchEvent(new Event('input', { bubbles: true }));
+                        el.dispatchEvent(new Event('change', { bubbles: true }));
+                        return 'OK:' + el.innerText.length;
+                    }""", self.description)
+                    print(f"  📋 简介 JS 赋值结果: {res}")
+
+                    # 验证是否成功写入
+                    verify = self.page.evaluate("""() => {
+                        var el = document.querySelector('.ql-editor[contenteditable="true"]');
+                        if (!el) return '';
+                        return el.innerText;
+                    }""")
+                    if verify and self.description[:10] in verify:
+                        print(f"  ✅ 简介已填写（{len(self.description)} 字）")
+                        return
+                    # JS 赋值后验证未通过，尝试 keyboard.type 兜底
+                    print("  ⚠️ JS 赋值验证未通过，尝试 keyboard.type 兜底...")
+                    editor = self.page.query_selector('.ql-editor[contenteditable="true"]')
+                    if editor:
+                        editor.click()
+                        self.page.keyboard.type(self.description, delay=15)
+                        time.sleep(1)
+                        print(f"  ✅ 简介已填写（keyboard.type，{len(self.description)} 字）")
+                        return
                 else:
                     # 兜底：找 textarea
                     textarea = self.page.query_selector('textarea')
                     if textarea:
                         textarea.fill(self.description)
+                        print(f"  ✅ 简介已填写（textarea，{len(self.description)} 字）")
+                        return
 
-                print(f"  ✅ 简介已填写（{len(self.description)} 字）")
-                return
+                if attempt < 2:
+                    time.sleep(2)
+                    continue
+                print("  ⚠️ 简介填写失败，继续")
             except Exception:
                 if attempt < 2:
                     time.sleep(2)
@@ -730,6 +773,10 @@ class BilibiliUploader:
         # 检查是否 disabled
         is_disabled = submit_btn.evaluate("el => el.disabled || el.classList.contains('disabled')")
         if is_disabled:
+            # 检查表单是否有未填项
+            form_errors = self._check_form_errors()
+            if form_errors:
+                raise RuntimeError(f"投稿按钮禁用，表单未填完整: {form_errors}")
             raise RuntimeError("投稿按钮处于禁用状态，可能表单未填完整")
 
         # 用原生鼠标点击（JS click 不能触发 React onClick）
@@ -755,17 +802,121 @@ class BilibiliUploader:
             if "/video/manage" in url or "/platform/edit" in url:
                 print("  ✅ 投稿已提交")
                 return
+            # 检测错误提示（toast / 表单验证）
+            error_msg = self._check_submit_errors()
+            if error_msg:
+                raise RuntimeError(f"投稿提交失败: {error_msg}")
             time.sleep(2)
 
-        print("  ⚠️ 未检测到 URL 跳转，但投稿可能已提交，继续轮询 BV 号")
+        # 未检测到跳转，再检查是否有错误
+        error_msg = self._check_submit_errors()
+        if error_msg:
+            raise RuntimeError(f"投稿提交失败（未跳转）: {error_msg}")
+
+        # 无跳转也无错误，可能投稿在后台处理中，继续轮询 BV 号
+        print("  ⚠️ 未检测到 URL 跳转，但未发现错误提示，继续轮询 BV 号")
+
+    def _check_submit_errors(self):
+        """检测提交后的页面错误提示（toast / 表单验证），返回错误信息或空字符串"""
+        try:
+            info = self.page.evaluate("""() => {
+                // 检测 toast 错误提示
+                var toastSelectors = [
+                    '[class*="toast-error"]',
+                    '[class*="bcc-toast-error"]',
+                    '.bcc-message-error',
+                    '[class*="message-error"]',
+                    '[class*="error-text"]',
+                    '[class*="form-error"]',
+                    '[class*="tips-error"]',
+                ];
+                var errors = [];
+                for (var sel of toastSelectors) {
+                    var els = document.querySelectorAll(sel);
+                    for (var el of els) {
+                        if (el.offsetParent !== null && el.offsetWidth > 0) {
+                            var t = (el.textContent || '').trim();
+                            if (t) errors.push(sel + ': ' + t.substring(0, 100));
+                        }
+                    }
+                }
+                // 检测红色提示文本
+                var tipSelectors = [
+                    '[style*="color: red"]',
+                    '[style*="color:#f00"]',
+                    '[style*="color: #f00"]',
+                    '.bcc-tips--error',
+                    '[class*="tips"]',
+                ];
+                for (var sel of tipSelectors) {
+                    var els = document.querySelectorAll(sel);
+                    for (var el of els) {
+                        if (el.offsetParent !== null && el.offsetWidth > 0) {
+                            var t = (el.textContent || '').trim();
+                            if (t && t.length > 0 && t.length < 100) {
+                                errors.push(sel + ': ' + t.substring(0, 100));
+                            }
+                        }
+                    }
+                }
+                return errors;
+            }""")
+            if info and len(info) > 0:
+                return "; ".join(info[:3])
+        except Exception:
+            pass
+        return ""
+
+    def _check_form_errors(self):
+        """检查表单是否有未填项或验证错误，返回错误描述列表"""
+        try:
+            errors = self.page.evaluate("""() => {
+                var errors = [];
+                // 检查必填字段是否有红框
+                var requiredSelectors = [
+                    'input.bcc-input-inner--error',
+                    '.bcc-tips--error',
+                    '[class*="error"] input',
+                ];
+                for (var sel of requiredSelectors) {
+                    var els = document.querySelectorAll(sel);
+                    for (var el of els) {
+                        if (el.offsetParent !== null) {
+                            errors.push(sel + ' 字段有验证错误');
+                        }
+                    }
+                }
+                // 检查标题是否为空
+                var titleInput = document.querySelector('input[placeholder*="标题"]');
+                if (titleInput && (!titleInput.value || titleInput.value.trim() === '')) {
+                    errors.push('标题未填写');
+                }
+                return errors;
+            }""")
+            return errors or []
+        except Exception:
+            return []
 
     def _wait_for_bvid(self):
-        """轮询个人空间获取 BV 号"""
+        """轮询个人空间获取 BV 号（仅按标题匹配，避免误匹配其他视频）"""
         print("  🔍 轮询个人空间获取 BV 号...")
+        title_prefix = self.title[:8] if len(self.title) >= 8 else self.title
+
+        # 优先从当前页面 URL 提取 BV（提交成功后可能跳转到投稿管理页）
+        for attempt in range(3):
+            try:
+                url = self.page.url
+                bvid = self._extract_bvid(url)
+                if bvid:
+                    print(f"  ✅ 从当前页面 URL 获取 BV 号: {bvid}")
+                    return bvid
+            except Exception:
+                pass
+            time.sleep(3)
+
         deadline = time.time() + 600  # 10 分钟
         while time.time() < deadline:
             try:
-                # 获取当前页面中的用户 UID（从 Cookie 或页面）
                 uid = self._get_uid()
                 if uid:
                     space_url = self.SPACE_URL_TEMPLATE.format(uid=uid)
@@ -773,17 +924,22 @@ class BilibiliUploader:
                     space_page.goto(space_url, wait_until="domcontentloaded", timeout=60000)
                     time.sleep(3)
 
-                    # 查找标题匹配的视频链接
+                    # 查找标题匹配的视频链接（仅按标题前缀匹配，不匹配任意 /BV 链接）
                     links = space_page.query_selector_all("a[href*='/video/BV']")
+                    match_count = 0
                     for link in links:
                         href = link.get_attribute("href") or ""
                         link_text = (link.inner_text() or "").strip()
-                        if self.title[:10] in link_text or "/BV" in href:
+                        # 仅按标题前缀匹配，避免误匹配个人空间里的其他视频
+                        if title_prefix in link_text:
                             bvid = self._extract_bvid(href)
                             if bvid:
+                                match_count += 1
                                 space_page.close()
-                                print(f"  ✅ 已获取 BV 号: {bvid}")
+                                print(f"  ✅ 已获取 BV 号: {bvid}（标题匹配）")
                                 return bvid
+                    if match_count == 0 and links:
+                        print(f"  ⏳ 个人空间有 {len(links)} 个视频，暂无标题匹配「{title_prefix}」的，继续轮询...")
                     space_page.close()
             except Exception:
                 pass
