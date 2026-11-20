@@ -1,0 +1,4 @@
+# B站上传专用依赖：视频流水线 requirements + playwright
+# 视频生成流水线（pipeline/render/assembly）不需要 playwright，故从 requirements.txt 移出
+-r requirements.txt
+playwright>=1.40.0
