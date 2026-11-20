@@ -290,16 +290,16 @@ class BilibiliUploader:
             raise RuntimeError("未找到视频上传 input 元素")
 
         # 让 input 可见（B站用 display:none 隐藏，需先暴露再 SetInputFiles）
-        file_input.evaluate("""() => {
-            this.style.display = 'block';
-            this.style.visibility = 'visible';
-            this.style.opacity = '1';
-            this.style.position = 'fixed';
-            this.style.top = '0';
-            this.style.left = '0';
-            this.style.width = '200px';
-            this.style.height = '50px';
-            this.style.zIndex = '99999';
+        file_input.evaluate("""el => {
+            el.style.display = 'block';
+            el.style.visibility = 'visible';
+            el.style.opacity = '1';
+            el.style.position = 'fixed';
+            el.style.top = '0';
+            el.style.left = '0';
+            el.style.width = '200px';
+            el.style.height = '50px';
+            el.style.zIndex = '99999';
         }""")
         time.sleep(0.5)
 
@@ -487,14 +487,14 @@ class BilibiliUploader:
 
         if image_input:
             # 让 input 可见
-            image_input.evaluate("""() => {
-                this.style.display = 'block';
-                this.style.visibility = 'visible';
-                this.style.opacity = '1';
-                this.style.position = 'fixed';
-                this.style.top = '0';
-                this.style.left = '0';
-                this.style.zIndex = '99999';
+            image_input.evaluate("""el => {
+                el.style.display = 'block';
+                el.style.visibility = 'visible';
+                el.style.opacity = '1';
+                el.style.position = 'fixed';
+                el.style.top = '0';
+                el.style.left = '0';
+                el.style.zIndex = '99999';
             }""")
             time.sleep(0.3)
             image_input.set_input_files(self.cover_path)
