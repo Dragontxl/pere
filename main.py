@@ -590,6 +590,7 @@ def _append_outro_clip(
             audio_codec=render_params["audio_codec"],
             preset=render_params["preset"],
             threads=render_params["threads"],
+            crf=render_params.get("crf", 18),
             api_key=api_key,
             language=language,
         )
