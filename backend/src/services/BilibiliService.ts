@@ -189,6 +189,7 @@ export class BilibiliService {
         title: task.title || '',
         article_content: task.article_content || '',
         orientation: task.orientation || 'landscape',
+        cookies_key: cookiesR2Key,
       },
     };
 
