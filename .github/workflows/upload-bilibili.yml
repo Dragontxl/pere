@@ -53,7 +53,7 @@ env:
 jobs:
   upload:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
 
     steps:
       - name: 检出代码
@@ -68,14 +68,22 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: pip-${{ runner.os }}-${{ hashFiles('requirements-bilibili.txt') }}
-          restore-keys: pip-${{ runner.os }}-
-          retention-days: 14
+          key: pip-bilibili-${{ runner.os }}-${{ hashFiles('requirements-bilibili.txt') }}-${{ hashFiles('requirements.txt') }}
+          restore-keys: pip-bilibili-${{ runner.os }}-
+
+      - name: 缓存 Playwright 浏览器
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-chromium-${{ hashFiles('requirements-bilibili.txt') }}
+          restore-keys: playwright-${{ runner.os }}-chromium-
 
       - name: 安装系统依赖
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg fonts-noto-cjk
+          sudo apt-get update -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Retries=5
+          sudo apt-get install -y --no-install-recommends \
+            -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Retries=5 \
+            ffmpeg fonts-noto-cjk
 
       - name: 安装 Python 依赖
         run: |
@@ -83,7 +91,12 @@ jobs:
 
       - name: 安装 Playwright 浏览器
         run: |
-          python -m playwright install chromium --with-deps
+          # 若缓存命中则跳过下载；否则下载 chromium（含系统依赖）
+          if [ ! -d "$HOME/.cache/ms-playwright" ] || [ -z "$(ls -A $HOME/.cache/ms-playwright 2>/dev/null)" ]; then
+            python -m playwright install chromium --with-deps
+          else
+            echo "Playwright browser cache hit, skipping download"
+          fi
 
       - name: 归一化参数
         id: params
