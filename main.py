@@ -689,9 +689,9 @@ def download_clips_from_r2(
 
     try:
         bucket = r2_config["bucket"]
-        downloaded = 0
 
-        # 列出 R2 下所有 final_clip_*.mp4 文件
+        # 先收集所有需要下载的对象（已存在的跳过），再并发下载
+        to_download = []
         paginator = client.get_paginator("list_objects_v2")
         for page in paginator.paginate(Bucket=bucket, Prefix=f"{r2_prefix}/final_clip_"):
             for obj in page.get("Contents", []):
@@ -701,8 +701,27 @@ def download_clips_from_r2(
                 local_path = work_dir / os.path.basename(clip_key)
                 if local_path.exists():
                     continue  # 已存在，跳过
+                to_download.append((clip_key, local_path))
+
+        if not to_download:
+            return 0
+
+        # 并发下载：网络 I/O 密集，串行逐个下载是装配阶段的主要耗时来源
+        downloaded = 0
+        max_workers = min(len(to_download), 8)
+        print(f"  ⚡ 并发下载 {len(to_download)} 个片段（{max_workers} 路）")
+
+        def _dl_one(item):
+            clip_key, local_path = item
+            client.download_file(bucket, clip_key, str(local_path))
+            return clip_key
+
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {pool.submit(_dl_one, item): item[0] for item in to_download}
+            for future in as_completed(futures):
+                clip_key = futures[future]
                 try:
-                    client.download_file(bucket, clip_key, str(local_path))
+                    future.result()
                     downloaded += 1
                     print(f"  📥 下载缓存片段: {os.path.basename(clip_key)}")
                 except Exception as e:
@@ -816,9 +835,9 @@ def download_images_from_r2(
 
     try:
         bucket = r2_config["bucket"]
-        downloaded = 0
 
-        # 列出 R2 下所有图片对象
+        # 先收集所有需要下载的图片（已存在的跳过），再并发下载
+        to_download = []
         paginator = client.get_paginator("list_objects_v2")
         for page in paginator.paginate(Bucket=bucket, Prefix=f"{r2_prefix}/images/"):
             for obj in page.get("Contents", []):
@@ -829,14 +848,32 @@ def download_images_from_r2(
                     continue
                 rel_path = parts[1]
                 local_path = temp_dir / rel_path
-                local_path.parent.mkdir(parents=True, exist_ok=True)
-
                 if local_path.exists():
                     continue
+                to_download.append((key, local_path))
 
+        if not to_download:
+            return 0
+
+        # 并发下载：图片数量多，串行逐个下载是渲染分片准备阶段的主要耗时来源
+        downloaded = 0
+        max_workers = min(len(to_download), 8)
+        print(f"  ⚡ 并发下载 {len(to_download)} 张图片（{max_workers} 路）")
+
+        def _dl_one(item):
+            key, local_path = item
+            local_path.parent.mkdir(parents=True, exist_ok=True)
+            client.download_file(bucket, key, str(local_path))
+            return key
+
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {pool.submit(_dl_one, item): item[0] for item in to_download}
+            for future in as_completed(futures):
+                key = futures[future]
                 try:
-                    client.download_file(bucket, key, str(local_path))
+                    future.result()
                     downloaded += 1
+                    print(f"  📥 下载图片: {key.split('/')[-1]}")
                 except Exception as e:
                     print(f"  ⚠️ 下载图片失败: {key} - {e}")
 
