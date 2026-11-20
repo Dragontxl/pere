@@ -445,14 +445,21 @@ class BilibiliUploader:
             pass
 
     def _upload_cover(self):
-        """上传封面图片"""
+        """上传封面图片（对齐参考项目 4 步流程）
+
+        步骤1：点击"添加封面"按钮
+        步骤2：在弹窗内上传封面文件
+        步骤3：勾选"双比例同步改动"复选框
+        步骤4：点击"完成"按钮
+        """
         if not self.cover_path or not os.path.exists(self.cover_path):
             print("  ⚠️ 无封面文件，跳过封面上传")
             return
 
         print("  🖼️ 开始上传封面...")
         self._take_screenshot("05_before_upload_cover", full_page=True)
-        # 用 JS 精确匹配"添加封面"按钮
+
+        # ========== 步骤1：点击"添加封面"按钮 ==========
         res = self.page.evaluate("""() => {
             var spans = document.querySelectorAll('span.add-text');
             var btn = null;
@@ -473,67 +480,224 @@ class BilibiliUploader:
                     }
                 }
             }
-            if (!btn) return 'NO_BTN';
+            if (!btn) return JSON.stringify({status: 'NO_BTN'});
             btn.scrollIntoView({block: 'center'});
             var rect = btn.getBoundingClientRect();
             return JSON.stringify({
                 status: 'FOUND',
+                text: btn.textContent.trim().substring(0, 20),
                 x: rect.x + rect.width / 2,
                 y: rect.y + rect.height / 2
             });
         }""")
         import json as _json
-        if res and "FOUND" in res:
+        if res:
             btn = _json.loads(res)
-            # 用原生鼠标点击
-            self.page.mouse.move(btn["x"], btn["y"])
-            time.sleep(0.2)
-            self.page.mouse.click(btn["x"], btn["y"])
-            print("  ✅ 已点击添加封面按钮")
+            if btn.get("status") == "FOUND":
+                self.page.mouse.move(btn["x"], btn["y"])
+                time.sleep(0.2)
+                self.page.mouse.click(btn["x"], btn["y"])
+                print(f"  ✅ 已点击添加封面按钮: {btn.get('text', '')}")
+                time.sleep(3)
+                self._take_screenshot("05_01_after_click_add")
+            else:
+                print("  ⚠️ 未找到添加封面按钮，跳过封面上传")
+                return
         else:
-            print("  ⚠️ 未找到添加封面按钮，尝试直接上传")
+            print("  ⚠️ 添加封面按钮无响应，跳过封面上传")
+            return
 
-        time.sleep(1)
-
-        # 在弹窗中找图片上传 input
-        image_input = None
-        for sel in [
-            'input[type="file"][accept*="image"]',
-            'input[type="file"][accept*="png"]',
-            'input[type="file"][accept*="jpg"]',
-        ]:
-            image_input = self.page.query_selector(sel)
-            if image_input:
-                break
-
-        if image_input:
-            # 让 input 可见
-            image_input.evaluate("""el => {
-                el.style.display = 'block';
-                el.style.visibility = 'visible';
-                el.style.opacity = '1';
-                el.style.position = 'fixed';
-                el.style.top = '0';
-                el.style.left = '0';
-                el.style.zIndex = '99999';
-            }""")
-            time.sleep(0.3)
-            image_input.set_input_files(self.cover_path)
-            self.page.evaluate("""() => {
-                const inputs = document.querySelectorAll('input[type="file"]');
-                for (const input of inputs) {
-                    input.dispatchEvent(new Event('change', { bubbles: true }));
-                    input.dispatchEvent(new Event('input', { bubbles: true }));
+        # ========== 步骤2：在弹窗内上传封面文件 ==========
+        # 在弹窗/浮层内查找 image file input（向上遍历父元素检查 modal/dialog/pop/uploader）
+        input_info = self.page.evaluate("""() => {
+            var inputs = document.querySelectorAll('input[type="file"]');
+            for (var inp of inputs) {
+                var acc = (inp.accept || '').toLowerCase();
+                if (acc.indexOf('image') !== -1 || acc.indexOf('png') !== -1 || acc.indexOf('jpg') !== -1) {
+                    // 向上遍历父元素，检查是否在弹窗内
+                    var p = inp.parentElement;
+                    var inModal = false;
+                    for (var i = 0; i < 12 && p; i++) {
+                        var c = (p.className || '').toString();
+                        if (c.indexOf('modal') !== -1 || c.indexOf('dialog') !== -1 || c.indexOf('pop') !== -1 || c.indexOf('uploader') !== -1) {
+                            inModal = true;
+                            break;
+                        }
+                        p = p.parentElement;
+                    }
+                    // 让 input 可见
+                    inp.style.display = 'block';
+                    inp.style.visibility = 'visible';
+                    inp.style.opacity = '1';
+                    return JSON.stringify({status: 'FOUND', accept: inp.accept, inModal: inModal});
                 }
-            }""")
-            time.sleep(2)
-            # 点击"完成"按钮
-            self._handle_confirm_dialog()
-            print("  ✅ 封面已上传")
-            self._take_screenshot("05_after_upload_cover", full_page=True)
+            }
+            return JSON.stringify({status: 'NO_INPUT', count: inputs.length});
+        }""")
+        if input_info:
+            input_res = _json.loads(input_info)
+            print(f"  📁 封面 file input: accept={input_res.get('accept','')} inModal={input_res.get('inModal', False)}")
+            if input_res.get("status") == "FOUND":
+                # 用 Playwright set_input_files 上传（优先找弹窗内的 image input）
+                image_input = None
+                all_inputs = self.page.query_selector_all('input[type="file"]')
+                for inp in all_inputs:
+                    accept = inp.get_attribute("accept") or ""
+                    if "image" in accept.lower() or "png" in accept.lower() or "jpg" in accept.lower():
+                        image_input = inp
+                        break
+                if not image_input and len(all_inputs) > 1:
+                    image_input = all_inputs[1]  # 兜底：第2个 file input
+
+                if image_input:
+                    # 确保 input 可见
+                    image_input.evaluate("""el => {
+                        el.style.display = 'block';
+                        el.style.visibility = 'visible';
+                        el.style.opacity = '1';
+                    }""")
+                    time.sleep(0.3)
+                    image_input.set_input_files(self.cover_path)
+                    print("  📂 封面文件已设置，等待上传处理...")
+                    time.sleep(5)
+                    self._take_screenshot("05_02_after_upload")
+                else:
+                    print("  ⚠️ 无法设置封面文件（未找到input），按ESC关闭")
+                    self.page.keyboard.press("Escape")
+                    time.sleep(1)
+                    return
+            else:
+                print(f"  ⚠️ 未找到封面 file input（共{input_res.get('count',0)}个input），按ESC关闭")
+                self.page.keyboard.press("Escape")
+                time.sleep(1)
+                return
         else:
-            print("  ⚠️ 未找到封面上传 input，跳过")
-            self._take_screenshot("05_cover_input_not_found", full_page=True)
+            print("  ⚠️ 查找封面 file input 失败，按ESC关闭")
+            self.page.keyboard.press("Escape")
+            time.sleep(1)
+            return
+
+        # ========== 步骤3：勾选"双比例同步改动"复选框 ==========
+        sync_info = self.page.evaluate("""() => {
+            var labels = document.querySelectorAll('label.sync-checkbox, .sync-checkbox-wrapper label, label.bcc-checkbox');
+            var targetLabel = null;
+            for (var lab of labels) {
+                if (lab.offsetParent !== null && lab.offsetWidth > 0) {
+                    // 检查是否在弹窗内
+                    var p = lab.parentElement;
+                    var inModal = false;
+                    for (var i = 0; i < 12 && p; i++) {
+                        var c = (p.className || '').toString();
+                        if (c.indexOf('modal') !== -1 || c.indexOf('dialog') !== -1 || c.indexOf('pop') !== -1) {
+                            inModal = true;
+                            break;
+                        }
+                        p = p.parentElement;
+                    }
+                    if (inModal) { targetLabel = lab; break; }
+                    if (!targetLabel) targetLabel = lab;
+                    break;
+                }
+            }
+            if (!targetLabel) return JSON.stringify({status: 'NO_LABEL'});
+            var cls = targetLabel.className || '';
+            var checked = cls.indexOf('bcc-checkbox-checked') !== -1;
+            var icon = targetLabel.querySelector('.bcc-icon-ic_MenuButton-tick, .bcc-iconfont');
+            var hasIcon = icon !== null;
+            targetLabel.scrollIntoView({block: 'center'});
+            var rect = targetLabel.getBoundingClientRect();
+            return JSON.stringify({
+                status: 'FOUND', checked: checked, hasIcon: hasIcon,
+                className: cls,
+                x: rect.x + rect.width / 2, y: rect.y + rect.height / 2
+            });
+        }""")
+        if sync_info:
+            sync_res = _json.loads(sync_info)
+            print(f"  📋 双比例同步复选框: checked={sync_res.get('checked')} class={sync_res.get('className','')}")
+            if sync_res.get("status") == "FOUND":
+                if not sync_res.get("checked"):
+                    print("  ☑️ 勾选双比例同步改动...")
+                    self.page.mouse.move(sync_res["x"], sync_res["y"])
+                    time.sleep(0.2)
+                    self.page.mouse.click(sync_res["x"], sync_res["y"])
+                    time.sleep(1)
+                    # 验证是否勾选成功
+                    check_res = self.page.evaluate("""() => {
+                        var lab = document.querySelector('label.sync-checkbox, label.bcc-checkbox');
+                        if (!lab) return 'NO_LABEL';
+                        return lab.className.indexOf('bcc-checkbox-checked') !== -1 ? 'CHECKED' : 'UNCHECKED';
+                    }""")
+                    print(f"  📋 勾选后状态: {check_res}")
+                else:
+                    print("  📋 双比例同步已勾选，跳过")
+            else:
+                print("  ⚠️ 未找到双比例同步复选框")
+        else:
+            print("  ⚠️ 双比例同步复选框无响应")
+
+        self._take_screenshot("05_03_after_sync_check")
+
+        # ========== 步骤4：点击"完成"按钮 ==========
+        complete_info = self.page.evaluate("""() => {
+            var btns = document.querySelectorAll('button, .bcc-button, [class*="btn"], div[class*="button"], span[class*="submit"]');
+            var completeBtn = null;
+            for (var b of btns) {
+                var t = (b.textContent || '').trim();
+                if (t === '完成' && b.offsetParent !== null && b.offsetWidth > 0) {
+                    // 优先在弹窗内找
+                    var p = b.parentElement;
+                    var inModal = false;
+                    for (var i = 0; i < 12 && p; i++) {
+                        var c = (p.className || '').toString();
+                        if (c.indexOf('modal') !== -1 || c.indexOf('dialog') !== -1 || c.indexOf('pop') !== -1) {
+                            inModal = true;
+                            break;
+                        }
+                        p = p.parentElement;
+                    }
+                    if (inModal) { completeBtn = b; break; }
+                    if (!completeBtn) completeBtn = b;
+                    break;
+                }
+            }
+            // 兜底：找包含"完成"的按钮
+            if (!completeBtn) {
+                for (var b of btns) {
+                    var t = (b.textContent || '').trim();
+                    if (t.indexOf('完成') !== -1 && b.offsetParent !== null && b.offsetWidth > 0) {
+                        completeBtn = b;
+                        break;
+                    }
+                }
+            }
+            if (!completeBtn) return JSON.stringify({status: 'NO_BTN'});
+            completeBtn.scrollIntoView({block: 'center'});
+            var rect = completeBtn.getBoundingClientRect();
+            return JSON.stringify({
+                status: 'FOUND', text: completeBtn.textContent.trim().substring(0, 10),
+                className: completeBtn.className || '',
+                x: rect.x + rect.width / 2, y: rect.y + rect.height / 2
+            });
+        }""")
+        if complete_info:
+            complete_res = _json.loads(complete_info)
+            if complete_res.get("status") == "FOUND":
+                print(f"  ✅ 点击完成按钮: {complete_res.get('text', '')}")
+                self.page.mouse.move(complete_res["x"], complete_res["y"])
+                time.sleep(0.2)
+                self.page.mouse.click(complete_res["x"], complete_res["y"])
+                time.sleep(3)
+                self._take_screenshot("05_04_after_complete")
+                print("  ✅ 封面已上传")
+            else:
+                print("  ⚠️ 未找到完成按钮，按ESC关闭")
+                self.page.keyboard.press("Escape")
+                time.sleep(1)
+        else:
+            print("  ⚠️ 完成按钮无响应，按ESC关闭")
+            self.page.keyboard.press("Escape")
+            time.sleep(1)
 
     def _fill_title(self):
         """填写标题"""
