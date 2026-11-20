@@ -1,0 +1,11 @@
+# render / assembly 阶段的轻量依赖
+# 不含 torch / transformers / zhipuai / opencv-python / playwright —— 这些仅 pipeline 阶段需要
+# pipeline 阶段仍使用完整 requirements.txt
+moviepy>=1.0.3
+imageio-ffmpeg>=0.4.7
+Pillow>=10.0.0
+numpy>=1.24.0
+boto3>=1.34.0
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+selenium>=4.10.0
