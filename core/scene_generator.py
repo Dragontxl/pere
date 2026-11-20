@@ -65,13 +65,13 @@ SCENE_PROMPT_TEMPLATE = """请将以下文章拆解为镜头列表，用于视�
    - visual_description: 画面描述，用于后续素材匹配
    - search_keywords: 用于搜索素材的关键词列表，需包含中英文
    - on_screen_text: 该镜头的解说文本（从文章中提取）
-   - duration: 预估时长（秒），每段不超过10秒，推荐5-10秒，中文约3-4字/秒
+   - duration: 预估时长（秒），不设上限，按解说文本实际长度估算，中文约3-4字/秒
    - visual_type: 镜头类型，只能从以下值选择：landscape, concept, data_visual, text_animation, diagram, portrait, event
    - needs_effect: 是否需要特效（布尔值）
 
 2. search_keywords 需要包含中英文，方便素材搜索，提供2-4个候选词。
 
-3. 每个镜头时长不超过10秒，推荐5-10秒。根据文章总字数和语速（约3-4字/秒）计算所需镜头数量，确保生成足够多的场景完整覆盖整篇文章。
+3. 镜头时长不设上限。根据文章总字数和语速（约3-4字/秒）估算所需镜头数量，确保生成足够多的场景完整覆盖整篇文章。
 
 4. 只输出 JSON，不要任何解释或额外内容。
 
