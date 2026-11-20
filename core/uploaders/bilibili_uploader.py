@@ -178,13 +178,13 @@ class BilibiliUploader:
         finally:
             self._close()
 
-    def _take_screenshot(self, name):
+    def _take_screenshot(self, name, full_page=False):
         """保存截图到工作目录（用于调试）"""
         try:
             import os
             os.makedirs(self.work_dir, exist_ok=True)
             path = os.path.join(self.work_dir, f"{name}.png")
-            self.page.screenshot(path=path, full_page=False)
+            self.page.screenshot(path=path, full_page=full_page)
             print(f"  📸 截图已保存: {path}")
         except Exception as e:
             print(f"  ⚠️ 截图失败: {e}")
@@ -250,6 +250,7 @@ class BilibiliUploader:
         self.page.goto(self.UPLOAD_URL, wait_until="domcontentloaded", timeout=60000)
         time.sleep(3)
         print(f"  🌐 已打开投稿页: {self.page.url}")
+        self._take_screenshot("01_navigate", full_page=True)
 
     def _check_login(self):
         """登录态检测：若跳转到登录页则失败"""
@@ -261,9 +262,11 @@ class BilibiliUploader:
         if login_form:
             raise RuntimeError("登录态失效，页面出现登录表单")
         print("  ✅ 登录态正常")
+        self._take_screenshot("02_login_check", full_page=True)
 
     def _close_notification(self):
         """关闭通知弹窗（若有）"""
+        self._take_screenshot("03_before_close_notification")
         selectors = [
             'button:has-text("知道了")',
             'button:has-text("暂不设置")',
@@ -277,13 +280,16 @@ class BilibiliUploader:
                     el.click(timeout=2000)
                     print("  🔕 已关闭通知弹窗")
                     time.sleep(1)
+                    self._take_screenshot("03_after_close_notification")
                     return
             except Exception:
                 continue
+        self._take_screenshot("03_after_close_notification_none")
 
     def _upload_video(self):
         """上传视频文件"""
         print("  📹 开始上传视频...")
+        self._take_screenshot("04_before_upload_video", full_page=True)
         time.sleep(3)
         # B站投稿页的视频上传 input 是隐藏的 file input
         selectors = [
@@ -347,10 +353,12 @@ class BilibiliUploader:
             url = self.page.url
             if "/platform/edit" in url or "/video/manage" in url:
                 print("  ✅ 视频上传完成")
+                self._take_screenshot("04_after_upload_video", full_page=True)
                 return
             title_input = self.page.query_selector('input[placeholder*="标题"]')
             if title_input:
                 print("  ✅ 视频上传完成（标题输入框已出现）")
+                self._take_screenshot("04_after_upload_video", full_page=True)
                 return
             # 检查错误信息
             error_text = self.page.query_selector('[class*="error"]:has-text("上传失败")')
@@ -443,6 +451,7 @@ class BilibiliUploader:
             return
 
         print("  🖼️ 开始上传封面...")
+        self._take_screenshot("05_before_upload_cover", full_page=True)
         # 用 JS 精确匹配"添加封面"按钮
         res = self.page.evaluate("""() => {
             var spans = document.querySelectorAll('span.add-text');
@@ -521,12 +530,15 @@ class BilibiliUploader:
             # 点击"完成"按钮
             self._handle_confirm_dialog()
             print("  ✅ 封面已上传")
+            self._take_screenshot("05_after_upload_cover", full_page=True)
         else:
             print("  ⚠️ 未找到封面上传 input，跳过")
+            self._take_screenshot("05_cover_input_not_found", full_page=True)
 
     def _fill_title(self):
         """填写标题"""
         print("  ✏️ 填写标题...")
+        self._take_screenshot("06_before_fill_title", full_page=True)
         for attempt in range(5):
             try:
                 title_input = self.page.query_selector('input[placeholder*="标题"]')
@@ -543,6 +555,7 @@ class BilibiliUploader:
                     }
                 }""")
                 print(f"  ✅ 标题已填写: {self.title[:40]}")
+                self._take_screenshot("06_after_fill_title", full_page=True)
                 return
             except Exception as e:
                 if attempt < 4:
@@ -553,6 +566,7 @@ class BilibiliUploader:
     def _fill_tags(self):
         """填写标签（逐个输入后按 Enter）"""
         print(f"  🏷️ 填写标签（{len(self.tags)} 个）...")
+        self._take_screenshot("09_before_fill_tags", full_page=True)
         for attempt in range(3):
             try:
                 for tag in self.tags:
@@ -575,6 +589,7 @@ class BilibiliUploader:
                     tag_input.press("Enter")
                     time.sleep(0.5)
                 print(f"  ✅ 标签已填写: {', '.join(self.tags)}")
+                self._take_screenshot("09_after_fill_tags", full_page=True)
                 return
             except Exception:
                 if attempt < 2:
@@ -601,6 +616,7 @@ class BilibiliUploader:
         keyboard.type 作为兜底。
         """
         print("  📝 填写简介...")
+        self._take_screenshot("10_before_fill_description", full_page=True)
         for attempt in range(3):
             try:
                 # 找 Quill 编辑器
@@ -643,6 +659,7 @@ class BilibiliUploader:
                     }""")
                     if verify and self.description[:10] in verify:
                         print(f"  ✅ 简介已填写（{len(self.description)} 字）")
+                        self._take_screenshot("10_after_fill_description", full_page=True)
                         return
                     # JS 赋值后验证未通过，尝试 keyboard.type 兜底
                     print("  ⚠️ JS 赋值验证未通过，尝试 keyboard.type 兜底...")
@@ -652,6 +669,7 @@ class BilibiliUploader:
                         self.page.keyboard.type(self.description, delay=15)
                         time.sleep(1)
                         print(f"  ✅ 简介已填写（keyboard.type，{len(self.description)} 字）")
+                        self._take_screenshot("10_after_fill_description_kb", full_page=True)
                         return
                 else:
                     # 兜底：找 textarea
@@ -659,6 +677,7 @@ class BilibiliUploader:
                     if textarea:
                         textarea.fill(self.description)
                         print(f"  ✅ 简介已填写（textarea，{len(self.description)} 字）")
+                        self._take_screenshot("10_after_fill_description_textarea", full_page=True)
                         return
 
                 if attempt < 2:
@@ -674,6 +693,7 @@ class BilibiliUploader:
     def _select_ai_declaration(self):
         """选择创作声明：点击下拉框→选"含AI生成内容"（与参考项目一致）"""
         print("  🤖 选择 AI 声明...")
+        self._take_screenshot("07_before_ai_declaration", full_page=True)
         # 滚动到创作声明区域
         self.page.evaluate("""() => {
             var els = document.evaluate('//*[contains(text(),"创作声明")]', document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
@@ -707,12 +727,14 @@ class BilibiliUploader:
         }""")
         print(f"  ✅ AI声明选择: {res2}")
         time.sleep(1)
+        self._take_screenshot("07_after_ai_declaration", full_page=True)
         if res2 != "SELECTED":
             print("  ⚠️ 未找到 AI 声明选项，跳过")
 
     def _select_district(self):
         """选择分区：资讯（JS 点击 select-controller→选"资讯"，与参考项目一致）"""
         print("  📂 选择分区...")
+        self._take_screenshot("08_before_district", full_page=True)
         # 滚动到分区区域
         self.page.evaluate("""() => {
             var els = document.evaluate('//*[contains(text(),"分区")]', document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
@@ -753,6 +775,7 @@ class BilibiliUploader:
         }""")
         print(f"  ✅ 分区选择: {res2}")
         time.sleep(1)
+        self._take_screenshot("08_after_district", full_page=True)
         if res2 == "NOT_FOUND":
             print("  ⚠️ 未找到分区选择器，跳过")
 
@@ -767,6 +790,7 @@ class BilibiliUploader:
         5. 未检测到 URL 跳转不报错，仅记录日志后继续轮询 BV 号
         """
         print("  📤 提交投稿...")
+        self._take_screenshot("11_before_submit", full_page=True)
         # 先关闭可能存在的弹窗（调用两次，可能有多层弹窗）
         print("  🔍 检查并关闭已有弹窗...")
         self._handle_confirm_dialog()
@@ -844,7 +868,7 @@ class BilibiliUploader:
 
         # 等 5 秒让确认弹窗出现
         time.sleep(5)
-        self._take_screenshot("after_submit")
+        self._take_screenshot("11_after_submit_click", full_page=True)
 
         # 处理二次确认弹窗（重试 3 次，弹窗可能延迟出现）
         print("  🔍 处理确认弹窗...")
@@ -852,7 +876,7 @@ class BilibiliUploader:
 
         # 再等 5 秒看是否跳转
         time.sleep(5)
-        self._take_screenshot("after_confirm")
+        self._take_screenshot("11_after_confirm", full_page=True)
 
         # 检查 URL 跳转
         url = self.page.url
@@ -868,6 +892,7 @@ class BilibiliUploader:
 
         # 无跳转也无错误，可能投稿在后台处理中，继续轮询 BV 号
         print(f"  ⚠️ 未检测到 URL 跳转（当前: {url}），但未发现错误提示，继续轮询 BV 号")
+        self._take_screenshot("11_final_check", full_page=True)
 
     def _retry_handle_dialog(self, max_retries):
         """重试处理确认弹窗（弹窗可能延迟出现）"""
@@ -1055,6 +1080,8 @@ class BilibiliUploader:
                     space_page = self.context.new_page()
                     space_page.goto(space_url, wait_until="domcontentloaded", timeout=60000)
                     time.sleep(3)
+                    self.page.screenshot(path=os.path.join(self.work_dir, "12_personal_space.png"), full_page=False)
+                    print("  📸 个人空间截图已保存")
 
                     # 查找标题匹配的视频链接（仅按标题前缀匹配，不匹配任意 /BV 链接）
                     links = space_page.query_selector_all("a[href*='/video/BV']")
