@@ -12,11 +12,15 @@
 """
 
 import os
+import subprocess
 from pathlib import Path
 
 from .image_to_clip import image_to_clip
 from .tts_synthesis import synthesize_speech
-from .video_merger import combine_audio_video
+from .clip_finalizer import finalize_clip, add_silent_audio, _resolve_ffmpeg
+
+# ffmpeg 路径（与 clip_finalizer 共用同一解析逻辑，保证编码参数一致）
+FFMPEG_EXE = _resolve_ffmpeg()
 
 # 固定片尾语音
 OUTRO_TEXT = "今天的分享就到这里，我们下次再会。"
@@ -78,6 +82,7 @@ def generate_outro_clip(
     audio_codec: str,
     preset: str,
     threads: int,
+    crf: int = 18,
     api_key: str | None = None,
     language: str = "zh",
     min_duration: float = 3.0,
@@ -85,8 +90,9 @@ def generate_outro_clip(
 ) -> str | None:
     """生成固定片尾视频片段（含固定语音）
 
-    流程：固定图片 → Ken Burns 动效视频 → 合并固定语音。
-    片尾编码参数与主视频一致，可直接追加到片段列表末尾参与拼接。
+    流程：固定图片 → Ken Burns 动效视频 → finalize_clip 合并语音。
+    片尾通过 finalize_clip 编码，参数（libx264 + yuv420p + -shortest +
+    -avoid_negative_ts）与内容片段完全一致，可直接参与流拷贝拼接。
 
     Args:
         work_dir: 工作目录（片尾中间文件输出目录）
@@ -96,6 +102,7 @@ def generate_outro_clip(
         audio_codec: 音频编码器，与主视频一致
         preset: 编码预设，与主视频一致
         threads: 编码线程数
+        crf: 编码质量（默认 18，与内容片段一致）
         api_key: Pexels API key（本地片尾图片缺失时下载用）
         language: 语音语言，"zh"（中文）或 "en"（英文）
         min_duration: 语音失败时片尾的最短时长（秒）
@@ -141,16 +148,49 @@ def generate_outro_clip(
             threads=threads,
         )
 
-        # 4. 合并语音（无语音时直接返回视频）
+        # 4. 合并语音：使用 finalize_clip 统一编码参数（libx264 + yuv420p +
+        #    -shortest + -avoid_negative_ts），与内容片段完全一致，
+        #    流拷贝拼接可直接通过，避免触发全量重编码
+        final_path = str(Path(work_dir) / "outro_final.mp4")
         if audio_path:
-            final_path = str(Path(work_dir) / "outro_final.mp4")
-            combine_audio_video(video_path, audio_path, final_path)
+            # 填充音频至视频时长（含 padding 留白），防止 finalize_clip 的
+            # -shortest 将留白截断。使用 ffmpeg apad 滤镜补静音
+            padded_audio = str(Path(work_dir) / "outro_audio_padded.mp3")
+            try:
+                pad_cmd = [
+                    FFMPEG_EXE, "-y",
+                    "-i", audio_path,
+                    "-af", "apad",
+                    "-t", f"{duration:.3f}",
+                    "-c:a", "libmp3lame",
+                    padded_audio,
+                ]
+                pad_result = subprocess.run(
+                    pad_cmd, capture_output=True, text=True,
+                    encoding="utf-8", errors="replace", timeout=30,
+                )
+                if pad_result.returncode != 0:
+                    print(f"  ⚠️ 音频填充失败，使用原始音频: {pad_result.stderr.strip()[-300:]}")
+                    padded_audio = audio_path
+            except Exception as e:
+                print(f"  ⚠️ 音频填充异常，使用原始音频: {e}")
+                padded_audio = audio_path
+
+            finalize_clip(
+                video_path, padded_audio, "",
+                final_path, crf=crf, enable_subtitle=False,
+            )
             # 清理中间文件
-            if os.path.exists(video_path):
-                os.unlink(video_path)
+            for tmp in (video_path, padded_audio):
+                if os.path.exists(tmp) and tmp != audio_path:
+                    os.unlink(tmp)
             return final_path
 
-        return video_path
+        # TTS 失败：用 add_silent_audio 统一编码参数（与 finalize_clip 一致）
+        add_silent_audio(video_path, final_path, crf=crf)
+        if os.path.exists(video_path):
+            os.unlink(video_path)
+        return final_path
     except Exception as e:
         print(f"  ⚠️ 片尾视频生成失败（不影响主视频）: {e}")
         import traceback
