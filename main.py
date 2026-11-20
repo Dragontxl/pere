@@ -13,7 +13,6 @@ import base64
 import hashlib
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -1225,38 +1224,6 @@ def _derive_metrics(text: str, max_items: int = 4) -> list:
     return metrics if len(metrics) >= 1 else []
 
 
-def _select_remotion_style(scene) -> str:
-    """根据视觉类型和内容特征选择 Remotion composition ID（含风格变体）
-
-    在保留原有模板的基础上，按内容特征匹配更专业的风格变体，
-    让不同内容有差异化视觉表现，避免全程同一种风格。
-    返回 composition ID（data-visual/text-animation/diagram/tech/news/magazine），
-    非 Remotion 类型返回 None。
-    """
-    vtype = scene.visual_type
-    text = scene.on_screen_text or ""
-
-    if vtype == "data_visual":
-        # 科技/数字密集内容用科技风
-        if re.search(r"科技|技术|数据|算法|芯片|互联网|人工智能|AI|数字|智能|云计算|区块链", text, re.IGNORECASE):
-            return "tech"
-        return "data-visual"
-
-    if vtype == "text_animation":
-        # 短金句/结论用杂志大字风
-        if len(text) <= 18 or re.search(r"结论|总之|意味着|核心|关键|本质|真正|事实上", text):
-            return "magazine"
-        return "text-animation"
-
-    if vtype == "diagram":
-        # 流程/机制类用新闻播报风
-        if re.search(r"步骤|流程|机制|首先|其次|然后|原因|导致|过程|阶段|第一|第二", text):
-            return "news"
-        return "diagram"
-
-    return None
-
-
 def render_remotion_scene(scene, duration, output_path, config: dict, render_params: dict, background_image=None, seg_idx=0):
     """渲染 Remotion 编码视频片段
 
@@ -1299,11 +1266,6 @@ def render_remotion_scene(scene, duration, output_path, config: dict, render_par
         bg_public_path = public_dir / bg_filename
         shutil.copy2(background_image, str(bg_public_path))
 
-    # 按内容特征选择风格变体（科技风/新闻风/杂志风），无匹配则用原模板
-    scene_id = _select_remotion_style(scene)
-    if not scene_id:
-        scene_id = scene.visual_type
-
     # 构建 props.json —— 写入 remotion/ 目录内，传相对文件名给 render.js
     # Remotion CLI 会将 --props 路径相对于其 cwd（remotion/）解析，
     # 写在外部目录会导致路径多拼一层 remotion\ 前缀，ENOENT 失败
@@ -1334,7 +1296,7 @@ def render_remotion_scene(scene, duration, output_path, config: dict, render_par
     cmd = [
         "node",
         str(render_script),
-        "--scene", scene_id,
+        "--scene", scene.visual_type,
         "--props", props_path.name,
         "--output", str(output_path),
     ]

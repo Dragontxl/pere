@@ -35,18 +35,10 @@ function parseArgs() {
 }
 
 // 映射场景类型到 composition ID（入口统一使用 Root.js，ID 仅含 a-z/0-9/-）
-// 前三项为视觉类型（Python 端 visual_type），后三项为风格变体（可直接传 composition ID）
 const SCENE_IDS = {
     'data_visual': 'data-visual',
     'text_animation': 'text-animation',
     'diagram': 'diagram',
-    // 风格变体：main.py 渲染决策可直接传这些 composition ID
-    'data-visual': 'data-visual',
-    'text-animation': 'text-animation',
-    'diagram': 'diagram',
-    'tech': 'tech',
-    'news': 'news',
-    'magazine': 'magazine',
 };
 
 // 查找系统 Chrome 路径，避免 Remotion 自动下载 Headless Shell（网络受限时会失败）
