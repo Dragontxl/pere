@@ -20,8 +20,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
-from zhipuai import ZhipuAI
-
 from core.utils import load_config, ensure_dir, clean_filename, is_chinese
 from core.article_input import (
     get_article_from_ai,
@@ -30,8 +28,6 @@ from core.article_input import (
 )
 from core.scene_generator import generate_scenes, generate_scenes_from_chunks, Scene
 from core.article_chunker import split_into_chunks
-from core.asset_matcher.pexels_downloader import download_pexels_images, _create_driver, PexelsSession
-from core.asset_matcher.multimodal_reviewer import MultimodalReviewer
 from core.remotion_analyzer import analyze_scenes
 from core.decision_engine import decide_scenes, SceneDecision
 from core.composer.image_to_clip import image_to_clip
@@ -903,6 +899,9 @@ def download_scene_images(
             if agnes_client is not None and search_kws:
                 search_kws = _translate_keywords(search_kws, agnes_client, model)
 
+            # 懒加载：Pexels 下载器依赖 selenium/bs4，仅 pipeline 阶段需要
+            from core.asset_matcher.pexels_downloader import download_pexels_images
+
             image_paths = download_pexels_images(
                 keywords=search_kws,
                 output_dir=str(image_dir),
@@ -993,6 +992,8 @@ def match_scene_images(
         try:
             multimodal_model = config.get("multimodal_model_name", "glm-4.1v-thinking-flash")
             multimodal_concurrency = config.get("multimodal_concurrency", 5)
+            # 懒加载：多模态评审仅在 pipeline 阶段使用
+            from core.asset_matcher.multimodal_reviewer import MultimodalReviewer
             reviewer = MultimodalReviewer(zhipu_client, model=multimodal_model, concurrency=multimodal_concurrency)
             print(f"✅ 多模态精评器已就绪（模型: {multimodal_model}, 并发: {multimodal_concurrency}）")
         except Exception as e:
@@ -2735,6 +2736,8 @@ def main():
         print("⚠️ 未配置智谱AI API Key，多模态精评将不可用")
         zhipu_client = None
     else:
+        # 懒加载：zhipuai SDK 仅 pipeline 阶段需要
+        from zhipuai import ZhipuAI
         zhipu_client = ZhipuAI(api_key=zhipu_api_key)
 
     print("=" * 60)
