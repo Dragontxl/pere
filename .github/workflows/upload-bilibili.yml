@@ -201,10 +201,11 @@ jobs:
             exit $exit_code
           fi
 
-      - name: 上传截图（失败时）
-        if: ${{ failure() }}
+      - name: 上传截图
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: bilibili-upload-failed-${{ env.TASK_ID }}
-          path: bilibili_work/
+          name: bilibili-screenshots-${{ env.TASK_ID }}
+          path: bilibili_work/*.png
           retention-days: 7
+          if-no-files-found: warn
