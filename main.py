@@ -1194,6 +1194,8 @@ def _derive_metrics(text: str, max_items: int = 4) -> list:
     """从解说文本提取数据指标（数字+单位），用于 DataVisualScene
 
     只提取「数字 + 可选单位」组成的指标，避免伪造柱状图比例。
+    支持中文货币组合（如「600块8毛1」→600.81元、「8块6」→8.6元、
+    「8块6毛2」→8.62元），将其合并为单个数值而非拆分为多个数字。
     没有任何数字时返回空列表（模板将只显示标题卡片）。
 
     Args:
@@ -1207,7 +1209,49 @@ def _derive_metrics(text: str, max_items: int = 4) -> list:
     text = (text or "").strip()
     if not text:
         return []
-    matches = re.findall(r'(\d+(?:\.\d+)?)\s*(万亿|亿元|万元|亿|万|%|％|家|人|元|倍)?', text)
+
+    # 1. 将中文货币组合合并为单个数值，避免「600块8毛1」被拆成 600/8/1
+    #    匹配模式：X块[Y毛/角][Z分]，支持简写形式
+    #    （无毛/分标记时，首个数字即毛，如「8块6」→8.6）
+    currency_re = re.compile(
+        r'(\d+)\s*块'
+        r'(?:'
+            r'(\d+)\s*(?:毛|角)'
+            r'(?:\s*(\d+)\s*分?)?'
+        r'|'
+            r'(\d+)\s*分'
+        r'|'
+            r'(\d+)'
+        r')?'
+    )
+
+    def _currency_replace(m):
+        yuan = m.group(1)
+        mao = m.group(2)          # 显式毛/角
+        fen = m.group(3)          # 分（在毛/角之后）
+        fen_only = m.group(4)     # 显式分（无毛）
+        mao_short = m.group(5)    # 简写形式（数字即毛）
+
+        if mao is not None:
+            val = float(f"{yuan}.{mao}{fen or ''}")
+        elif fen_only is not None:
+            val = float(f"{yuan}.0{fen_only}")
+        elif mao_short is not None:
+            val = float(f"{yuan}.{mao_short}")
+        else:
+            val = float(yuan)
+
+        if val == int(val):
+            return f"{int(val)}元"
+        return f"{val}元"
+
+    processed = currency_re.sub(_currency_replace, text)
+
+    # 2. 从合并后的文本中提取数字+单位
+    matches = re.findall(
+        r'(\d+(?:\.\d+)?)\s*(万亿|亿元|万元|亿|万|%|％|家|人|元|倍)?',
+        processed
+    )
     metrics = []
     seen = set()
     for num, unit in matches:
