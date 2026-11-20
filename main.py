@@ -1508,9 +1508,8 @@ def _render_single_scene(
     供并行渲染调用，封装了 Remotion 渲染、图片 Ken Burns 兜底、
     以及字幕烧录+音频合并的完整逻辑。
 
-    一个场景可能因语音超长被拆成多段（seg_idx > 0），此时 clip 文件名
-    带段号后缀，视频时长用该段自身时长（seg_duration），避免各段都按
-    全长渲染导致音画不匹配。
+    一个镜头始终渲染成一个片段（seg_idx 恒为 0）。seg_idx/seg_duration
+    参数保留用于兼容历史缓存片段，正常流程不再产生子镜头。
 
     Args:
         scene: 镜头对象
@@ -1720,92 +1719,30 @@ def _render_color_path(scene, seg_duration, clip_path, final_clip_path,
         return None
 
 
-def _split_text_balanced(text: str) -> list:
-    """把文本在标点处拆成两段，尽量均匀
+def _tts_synthesize(text, tag, work_dir, language):
+    """为一段解说文本合成语音（整段合成，不拆分子镜头）
 
-    用于 TTS 音频超过时长上限时拆分场景，保证每段语音完整不截断。
-    优先在中文标点（。！？；，、）处断开，避免在词中硬拆。
+    镜头时长不设上限：不再按 10 秒上限把文本拆成多段，
+    一个镜头始终对应一个片段，音画天然对齐。
 
-    Args:
-        text: 要拆分的文本
-
-    Returns:
-        两段文本的列表；拆不开时返回原文本单段
-    """
-    if len(text) < 16:
-        return [text]
-
-    target = len(text) // 2
-    # 标点优先级（强标点处断开更自然）
-    punct_order = ["。", "！", "？", "；", "，", "、"]
-    best_pos = -1
-    best_dist = float("inf")
-    best_priority = len(punct_order)
-    for priority, ch in enumerate(punct_order):
-        pos = text.find(ch)
-        while pos != -1:
-            dist = abs(pos - target)
-            if dist < best_dist or (dist == best_dist and priority < best_priority):
-                best_dist = dist
-                best_pos = pos
-                best_priority = priority
-            pos = text.find(ch, pos + 1)
-
-    if 0 < best_pos < len(text) - 1:
-        return [text[:best_pos + 1], text[best_pos + 1:]]
-
-    # 没有合适标点，按字符数硬拆
-    mid = len(text) // 2
-    return [text[:mid], text[mid:]]
-
-
-def _tts_split(text, tag, work_dir, max_duration, language, depth=0):
-    """递归 TTS：文本超长时在标点处拆分，保证每段音频 ≤ 上限
-
-    先对整段文本合成语音并测时长，超限则在标点处拆成两段分别合成，
-    递归处理直到每段音频 ≤ max_duration。这样每段的语音都完整，
-    不会被时长上限截断。
-
-    正常流程和重渲染流程共用此函数，保证拆分逻辑一致。
+    正常流程和重渲染流程共用此函数。
 
     Args:
         text: 要合成的文本
-        tag: 文件名标识（scene_id，拆分后追加后缀）
+        tag: 文件名标识（scene_id）
         work_dir: 工作目录（音频文件保存于此）
-        max_duration: 单段音频时长上限（秒）
         language: 文章语言，"zh" 或 "en"，决定 TTS 音色
-        depth: 递归深度（防无限拆分）
 
     Returns:
-        [(seg_path, dur, text), ...]
+        [(seg_path, dur, text)]
     """
-    seg_path = str(work_dir / f"audio_seg_{tag}_{depth}.mp3")
+    seg_path = str(work_dir / f"audio_seg_{tag}_0.mp3")
     dur = synthesize_speech(text, seg_path, language=language)
-    if dur <= max_duration:
-        return [(seg_path, dur, text)]
-    # 超长：尝试拆分
-    if depth >= 3 or len(text) < 16:
-        print(f"  ⏱️ {tag} 语音 {dur:.1f}s 超 {max_duration:.0f}s，"
-              f"文本无法再拆分，截断至上限")
-        return [(seg_path, dur, text)]
-    parts = _split_text_balanced(text)
-    if len(parts) <= 1:
-        print(f"  ⏱️ {tag} 语音 {dur:.1f}s 超限，文本无法再拆分，截断至上限")
-        return [(seg_path, dur, text)]
-    # 拆分后删除原始超长音频，改用拆分段
-    try:
-        os.unlink(seg_path)
-    except OSError:
-        pass
-    segments = []
-    for i, part in enumerate(parts):
-        segments.extend(_tts_split(part, f"{tag}_{i}", work_dir, max_duration,
-                                   language, depth + 1))
-    return segments
+    return [(seg_path, dur, text)]
 
 
-def _tts_one(scene, work_dir, max_duration, language):
-    """为单个场景合成语音，超长时自动拆分
+def _tts_one(scene, work_dir, language):
+    """为单个场景合成语音（整段合成，不拆分子镜头）
 
     返回 (scene, segments)，segments 为 [(seg_path, dur, text), ...]。
     正常流程和重渲染流程共用此函数。
@@ -1813,18 +1750,17 @@ def _tts_one(scene, work_dir, max_duration, language):
     Args:
         scene: 镜头对象
         work_dir: 工作目录
-        max_duration: 单段音频时长上限（秒）
         language: 文章语言
 
     Returns:
         (scene, [(seg_path, dur, text), ...])
     """
     text = scene.on_screen_text or ""
-    segments = _tts_split(text, scene.scene_id, work_dir, max_duration, language)
+    segments = _tts_synthesize(text, scene.scene_id, work_dir, language)
     total_dur = sum(d for _, d, _ in segments)
     if total_dur <= 0:
-        # 合成失败：按字数估算时长，片段走静音音轨兜底
-        total_dur = max(2.0, min(max_duration, len(text) / 5.2))
+        # 合成失败：按字数估算时长，片段走静音音轨兜底（不设上限）
+        total_dur = max(2.0, len(text) / 5.2)
     scene.duration = total_dur
     return scene, segments
 
@@ -2010,15 +1946,14 @@ def rerender_clips(work_dir, config: dict, render_params: dict, args) -> str:
             old.unlink()
             print(f"  🗑️ 删除旧片段: {old.name}")
 
-    # 重新 TTS 目标场景
+    # 重新 TTS 目标场景（整段合成，不设时长上限）
     language = args.language or config.get("tts_language", "zh")
-    MAX_SCENE_DURATION = 10.0
     print(f"\n🎙️ 重新合成语音（语言: {language}）...")
     audio_segments = {}
     for scene in target_scenes:
-        segments = _tts_split(
+        segments = _tts_synthesize(
             scene.on_screen_text, scene.scene_id,
-            work_dir, MAX_SCENE_DURATION, language,
+            work_dir, language,
         )
         audio_segments[scene.scene_id] = segments
         total_dur = sum(d for _, d, _ in segments)
@@ -2051,7 +1986,7 @@ def rerender_clips(work_dir, config: dict, render_params: dict, args) -> str:
                     resolution, fps, codec, audio_codec, preset, per_worker_threads,
                     args.skip_remotion,
                     None, scene.on_screen_text or "",
-                    enable_subtitle, 0, scene.duration or max(2.0, min(10.0, len(scene.on_screen_text or "") / 5.2)),
+                    enable_subtitle, 0, scene.duration or max(2.0, len(scene.on_screen_text or "") / 5.2),
                 )
                 futures[future] = (scene, 0)
             else:
@@ -2164,17 +2099,17 @@ def compose_video(
     crf = render_params["crf"]
 
     # 6a. 逐镜头语音合成（音画天然对齐）
-    # 每个镜头只合成自己那段解说，镜头时长 = 实测语音时长（上限 10 秒）。
+    # 每个镜头只合成自己那段解说，镜头时长 = 实测语音时长（不设上限）。
     # 不再「先合成全文、再按比例把总时长摊给各镜头」——那套做法一旦分镜
     # 没有覆盖全文（LLM 曾把 6210 字只切成 8 个镜头），就会丢掉绝大部分解说。
+    # 也不再因语音超 10 秒而拆分子镜头：一个镜头就是一个片段。
     print("\n🎙️ 逐镜头合成语音...")
-    MAX_SCENE_DURATION = 10.0
     audio_segments = {}  # {scene_id: [(seg_path, dur, subtitle_text), ...]}
 
     if scenes:
         with ThreadPoolExecutor(max_workers=4) as pool:
             futures = [
-                pool.submit(_tts_one, s, work_dir, MAX_SCENE_DURATION, args.language)
+                pool.submit(_tts_one, s, work_dir, args.language)
                 for s in scenes
             ]
             done = 0
@@ -2186,11 +2121,7 @@ def compose_video(
                     continue
                 done += 1
                 audio_segments[scene.scene_id] = segments
-                if len(segments) > 1:
-                    seg_info = " + ".join(f"{d:.1f}s" for _, d, _ in segments)
-                    print(f"  🔀 镜头 {scene.scene_id} 语音超长，拆分为 "
-                          f"{len(segments)} 段（{seg_info}）")
-                elif segments and segments[0][1] <= 0:
+                if segments and segments[0][1] <= 0:
                     print(f"  ⚠️ 镜头 {scene.scene_id} 语音合成失败，"
                           f"按 {scene.duration:.1f}s 渲染（无解说音轨）")
 
@@ -2230,7 +2161,7 @@ def compose_video(
                     args.skip_remotion,
                     None, scene.on_screen_text or "",
                     enable_subtitle, 0,
-                    scene.duration or max(2.0, min(10.0, len(scene.on_screen_text or "") / 5.2))
+                    scene.duration or max(2.0, len(scene.on_screen_text or "") / 5.2)
                 )
                 futures[future] = (scene, 0)
             else:
@@ -2390,14 +2321,13 @@ def prepare_render_artifacts(
     Returns:
         render_manifest.json 本地路径
     """
-    MAX_SCENE_DURATION = 10.0
     print("\n🎙️ 逐镜头合成语音...")
     audio_segments = {}  # {scene_id: [(seg_path, dur, subtitle_text), ...]}
 
     if scenes:
         with ThreadPoolExecutor(max_workers=4) as pool:
             futures = [
-                pool.submit(_tts_one, s, work_dir, MAX_SCENE_DURATION, args.language)
+                pool.submit(_tts_one, s, work_dir, args.language)
                 for s in scenes
             ]
             done = 0
@@ -2409,11 +2339,7 @@ def prepare_render_artifacts(
                     continue
                 done += 1
                 audio_segments[scene.scene_id] = segments
-                if len(segments) > 1:
-                    seg_info = " + ".join(f"{d:.1f}s" for _, d, _ in segments)
-                    print(f"  🔀 镜头 {scene.scene_id} 语音超长，拆分为 "
-                          f"{len(segments)} 段（{seg_info}）")
-                elif segments and segments[0][1] <= 0:
+                if segments and segments[0][1] <= 0:
                     print(f"  ⚠️ 镜头 {scene.scene_id} 语音合成失败，"
                           f"按 {scene.duration:.1f}s 渲染（无解说音轨）")
 
@@ -2446,7 +2372,7 @@ def prepare_render_artifacts(
         segs = audio_segments.get(scene.scene_id, [])
         if not segs:
             # TTS 未生成音频段：用 scene.duration 兜底（若仍为 0 则按字数估算）
-            fallback_dur = scene.duration if scene.duration > 0 else max(2.0, min(10.0, len(scene.on_screen_text or "") / 5.2))
+            fallback_dur = scene.duration if scene.duration > 0 else max(2.0, len(scene.on_screen_text or "") / 5.2)
             clips.append({
                 "scene_id": scene.scene_id,
                 "seg_idx": 0,
@@ -2639,7 +2565,7 @@ def render_shard(
                 args.skip_remotion,
                 audio_seg_path, subtitle,
                 enable_subtitle, seg_idx,
-                clip.get("duration") or scene.duration or max(2.0, min(10.0, len(subtitle) / 5.2))
+                clip.get("duration") or scene.duration or max(2.0, len(subtitle) / 5.2)
             )
             futures[future] = (scene_id, seg_idx, audio_file)
 
