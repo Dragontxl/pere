@@ -178,7 +178,7 @@ class BilibiliUploader:
             self._handle_confirm_dialog()
             self._upload_cover()
             # 防御：若封面未落到表单上（页面重置/弹窗异常），重试一次
-            if self.cover_path and os.path.exists(self.cover_path) and not self._cover_present():
+            if self.cover_path and os.path.exists(self.cover_path) and not self._cover_present(wait=5):
                 print("  ⚠️ 表单未显示封面，重试上传封面...")
                 self._upload_cover()
             self._fill_title()
@@ -771,13 +771,17 @@ class BilibiliUploader:
                 time.sleep(3)
                 self._take_screenshot("05_04_after_complete")
                 print("  ✅ 封面已上传")
-                if self._cover_present():
+                if self._wait_cover_modal_closed():
+                    print("  ✅ 封面弹窗已关闭（完成已生效）")
+                else:
+                    print("  ⚠️ 封面弹窗未关闭，可能仍有校验提示")
+                if self._cover_present(wait=10):
                     print("  ✅ 表单已显示封面缩略图")
                     score = self._form_cover_similarity()
                     if score is not None and score > 55:
                         print(f"  ⚠️ 表单封面与本地封面差异较大（{score:.1f}），可能应用了默认封面")
                 else:
-                    print("  ⚠️ 表单中暂未检测到封面缩略图，稍后重试")
+                    print("  ⚠️ 表单中暂未检测到封面缩略图")
             else:
                 print("  ⚠️ 未找到完成按钮，按ESC关闭")
                 self.page.keyboard.press("Escape")
@@ -1014,37 +1018,66 @@ class BilibiliUploader:
             print(f"  ⚠️ 封面比对失败: {e}")
             return None
 
-    def _cover_present(self):
-        """检测投稿表单中是否已显示封面缩略图"""
-        try:
-            raw = self.page.evaluate("""() => {
-                const imgs = Array.from(document.querySelectorAll('img'));
-                const hits = [];
-                for (const img of imgs) {
-                    const src = img.src || '';
-                    if (!src) continue;
-                    const r = img.getBoundingClientRect();
-                    if (r.width < 100 || r.height < 50) continue;
-                    if (r.width > 800 || r.height > 500) continue;
-                    let p = img.parentElement, inCover = false, excluded = false;
-                    for (let i = 0; i < 12 && p; i++) {
-                        const c = ((p.className || '').toString()).toLowerCase();
-                        if (c.indexOf('recommend') !== -1 || c.indexOf('system') !== -1) excluded = true;
-                        if (c.indexOf('cover') !== -1) { inCover = true; break; }
-                        p = p.parentElement;
-                    }
-                    if (inCover && !excluded) hits.push(src.slice(0, 100));
-                }
-                return JSON.stringify({count: hits.length, hits: hits.slice(0, 3)});
-            }""")
-            import json as _json
-            info = _json.loads(raw) if raw else {"count": 0}
-            if info.get("count", 0) > 0:
-                print(f"  🖼️ 封面缩略图: {info.get('hits', [])[:1]}")
+    def _wait_cover_modal_closed(self, timeout=15):
+        """等待封面弹窗关闭（点击“完成”生效后的直接信号）"""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if not self._cover_modal_state().get("modal"):
                 return True
-        except Exception as e:
-            print(f"  ⚠️ 封面检测失败: {e}")
+            time.sleep(1)
         return False
+
+    def _cover_present(self, wait=0):
+        """检测投稿表单中是否已显示封面缩略图
+
+        以“以下为系统推荐封面”文字为锚点：封面缩略图位于该行之前，
+        避免把系统推荐封面误判为已上传封面。wait>0 时轮询等待缩略图渲染。
+        """
+        import json as _json
+        deadline = time.time() + (wait or 0)
+        while True:
+            try:
+                raw = self.page.evaluate("""() => {
+                    var anchor = null;
+                    for (var el of document.querySelectorAll('div, span, p')) {
+                        var t = (el.textContent || '').trim();
+                        if (t.indexOf('以下为系统推荐封面') !== -1 && el.offsetParent !== null && el.offsetWidth > 0 && el.offsetWidth < 700) {
+                            anchor = el;
+                            break;
+                        }
+                    }
+                    var hits = [];
+                    for (var img of document.querySelectorAll('img')) {
+                        var src = img.src || '';
+                        if (!src || src.indexOf('data:image/svg') === 0) continue;
+                        var r = img.getBoundingClientRect();
+                        if (r.width < 80 || r.height < 40) continue;
+                        if (r.width > 500 || r.height > 320) continue;
+                        if (anchor) {
+                            var cmp = anchor.compareDocumentPosition(img);
+                            if (!(cmp & Node.DOCUMENT_POSITION_PRECEDING)) continue;
+                        } else {
+                            var p = img.parentElement, inCover = false;
+                            for (var i = 0; i < 12 && p; i++) {
+                                var c = ((p.className || '').toString()).toLowerCase();
+                                if (c.indexOf('cover') !== -1) { inCover = true; break; }
+                                p = p.parentElement;
+                            }
+                            if (!inCover) continue;
+                        }
+                        hits.push(src.slice(0, 100));
+                    }
+                    return JSON.stringify({count: hits.length, hits: hits.slice(0, 3)});
+                }""")
+                info = _json.loads(raw) if raw else {"count": 0}
+                if info.get("count", 0) > 0:
+                    print(f"  🖼️ 封面缩略图: {info.get('hits', [])[:1]}")
+                    return True
+            except Exception as e:
+                print(f"  ⚠️ 封面检测失败: {e}")
+            if time.time() >= deadline:
+                return False
+            time.sleep(2)
 
     def _fill_title(self):
         """填写标题"""
