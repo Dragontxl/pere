@@ -7,9 +7,10 @@
 1. 从 R2 下载视频、封面、Cookie
 2. 用 Agnes 从文章内容提炼简介和标签（不超过5个）
 3. 启动无头浏览器，注入 Cookie，打开投稿页
-4. 上传视频 → 上传封面 → 填标题/简介/标签 → 选 AI 声明/分区
-5. 提交投稿，轮询个人空间获取 BV 号
-6. 发送结果回调到后端
+4. 上传视频，**等待文件真正上传到 100%**（卡死/超时直接报错，避免假成功）
+5. 上传封面 → 填标题/简介/标签 → 选 AI 声明/分区（在上传完成后填写，避免表单被重置）
+6. 提交投稿，从投稿接口/创作中心接口获取 BV 号（个人空间轮询兜底）
+7. 发送结果回调到后端
 
 用法（CI 调用）：
     python -m core.uploaders.bilibili_uploader \
@@ -140,6 +141,9 @@ class BilibiliUploader:
 
     UPLOAD_URL = "https://member.bilibili.com/platform/upload/video/frame?page_from=creative_home_top_upload"
     SPACE_URL_TEMPLATE = "https://space.bilibili.com/{uid}/video"
+    # 视频上传等待：总超时 20 分钟，连续 5 分钟无进度视为卡死
+    UPLOAD_TIMEOUT = 20 * 60
+    UPLOAD_STALL_TIMEOUT = 5 * 60
 
     def __init__(self, video_path, cover_path, cookies_path, title, description, tags, headless=True, work_dir=None):
         self.video_path = video_path
@@ -154,6 +158,9 @@ class BilibiliUploader:
         self.browser = None
         self.context = None
         self.page = None
+        self.submit_bvid = None
+        self._upload_confirmed = False
+        self._submit_api_responses = []
 
     def run(self):
         """执行上传，返回 (bvid, url) 或 (None, None)"""
@@ -164,8 +171,16 @@ class BilibiliUploader:
             self._check_login()
             self._close_notification()
             self._upload_video()
+            # 关键：等视频真正上传完成后再填表/上传封面/投稿。
+            # 之前在上传进度 88-93% 时点击投稿，B站提示“等待视频上传完成后会自动提交”，
+            # 随后上传卡死、页面表单被重置，导致封面和标题等元数据丢失。
+            self._wait_for_upload_complete()
             self._handle_confirm_dialog()
             self._upload_cover()
+            # 防御：若封面未落到表单上（页面重置/弹窗异常），重试一次
+            if self.cover_path and os.path.exists(self.cover_path) and not self._cover_present():
+                print("  ⚠️ 表单未显示封面，重试上传封面...")
+                self._upload_cover()
             self._fill_title()
             self._select_ai_declaration()
             self._select_district()
@@ -215,7 +230,18 @@ class BilibiliUploader:
         self.page.add_init_script(
             "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
         )
+        # 监听投稿接口响应，直接拿 BV 号（比轮询个人空间更可靠）
+        self.page.on("response", self._on_submit_response)
         print("  🚀 浏览器已启动")
+
+    def _on_submit_response(self, response):
+        """记录投稿接口响应（仅缓存对象，不在此处解析，避免事件回调里调用同步 API）"""
+        try:
+            if "/x/vu/web/add" in response.url:
+                self._submit_api_responses.append(response)
+                print(f"  📡 捕获投稿接口响应: {response.status} {response.url[:100]}")
+        except Exception:
+            pass
 
     def _inject_cookies(self, cookies_json_path):
         """从 JSON 文件注入 Cookie"""
@@ -368,6 +394,116 @@ class BilibiliUploader:
 
         raise RuntimeError("视频上传超时（5 分钟）")
 
+    def _get_upload_state(self):
+        """读取当前视频上传状态（进度百分比 / 完成 / 失败）"""
+        raw = self.page.evaluate(r"""() => {
+            const text = (document.body && document.body.innerText) || '';
+            const progressEls = document.querySelectorAll(
+                '[class*="progress"], [class*="upload"], [class*="percent"]'
+            );
+            const percents = [];
+            for (const el of progressEls) {
+                const t = (el.innerText || el.textContent || '').trim();
+                const m = t.match(/(\d{1,3})\s*%/g);
+                if (m) m.forEach(s => percents.push(parseInt(s)));
+                const w = (el.style && el.style.width) || '';
+                if (w.trim().endsWith('%')) percents.push(parseInt(w));
+                const now = el.getAttribute('aria-valuenow');
+                if (now) percents.push(parseInt(now));
+            }
+            const bodyMatch = text.match(/(\d{1,3})\s*%/g) || [];
+            const bodyPercents = bodyMatch.map(s => parseInt(s));
+            const waitingSubmit = /等待视频上传完成/.test(text);
+            return JSON.stringify({
+                hasFail: /上传失败|上传出错|上传中断/.test(text),
+                hasDone: /上传完成|上传成功/.test(text) && !waitingSubmit,
+                waitingSubmit: waitingSubmit,
+                hasUploading: /上传中|正在上传|MB\/s|MB\/S/.test(text),
+                maxProgressPercent: percents.length ? Math.max(...percents) : null,
+                maxBodyPercent: bodyPercents.length ? Math.max(...bodyPercents) : null,
+                snippet: text.replace(/\s+/g, ' ').slice(0, 300)
+            });
+        }""")
+        import json as _json
+        return _json.loads(raw) if raw else {}
+
+    def _wait_for_upload_complete(self, timeout=None, stall_timeout=None):
+        """等待视频文件真正上传完成（监控进度，卡死/超时报错）
+
+        轮询页面上的上传进度，满足任一条件即视为完成：
+        - 页面显示“上传完成/上传成功”
+        - 进度百分比达到 100%
+
+        连续 stall_timeout 秒进度不变化视为卡死（B站在网速骤降时会停在 9x%），
+        直接抛错，避免像 Run #13 那样“假成功”。
+        """
+        timeout = timeout or self.UPLOAD_TIMEOUT
+        stall_timeout = stall_timeout or self.UPLOAD_STALL_TIMEOUT
+        if self._upload_confirmed:
+            print("  ✅ 视频已确认上传完成，跳过等待")
+            return
+        print("  ⏳ 等待视频文件真正上传完成（进度监控）...")
+
+        start = time.time()
+        last_percent = None
+        last_change = time.time()
+        last_log = 0.0
+        no_progress_checks = 0
+
+        while time.time() - start < timeout:
+            state = self._get_upload_state()
+            elapsed = int(time.time() - start)
+
+            if state.get("hasFail"):
+                self._take_screenshot("04_upload_failed", full_page=True)
+                raise RuntimeError(f"视频上传失败：{state.get('snippet', '')[:200]}")
+
+            if state.get("hasDone"):
+                print(f"  ✅ 视频上传完成（页面提示，耗时 {elapsed}s）")
+                time.sleep(3)
+                self._take_screenshot("04_after_upload_complete", full_page=True)
+                return
+
+            percent = state.get("maxProgressPercent")
+            if percent is None:
+                percent = state.get("maxBodyPercent")
+
+            if percent is not None:
+                no_progress_checks = 0
+                if last_percent is None or percent > last_percent:
+                    last_percent = percent
+                    last_change = time.time()
+                if percent >= 100:
+                    print(f"  ✅ 视频上传完成（进度 100%，耗时 {elapsed}s）")
+                    time.sleep(3)
+                    self._take_screenshot("04_after_upload_complete", full_page=True)
+                    return
+                if time.time() - last_change > stall_timeout:
+                    self._take_screenshot("04_upload_stalled", full_page=True)
+                    raise RuntimeError(
+                        f"视频上传卡死：{stall_timeout}s 无进度（停留在 {percent}%），"
+                        f"页面：{state.get('snippet', '')[:200]}"
+                    )
+                if time.time() - last_log > 30:
+                    print(f"  ⏳ 上传中 {percent}%（已等待 {elapsed}s）")
+                    last_log = time.time()
+            else:
+                # 页面暂时没有进度信息：只有在等待足够久、且连续多次都没有“上传中”字样时，
+                # 才按上传完成处理（避免上传刚开始、进度条还没渲染就误判）
+                no_progress_checks += 1
+                if elapsed > 120 and not state.get("hasUploading") and no_progress_checks >= 6:
+                    print(f"  ⚠️ 页面未显示进度，但已无上传中标识，按上传完成处理（{elapsed}s）")
+                    self._take_screenshot("04_after_upload_assumed", full_page=True)
+                    return
+                if time.time() - last_log > 30:
+                    print(f"  ⏳ 等待上传进度...（已等待 {elapsed}s）")
+                    last_log = time.time()
+
+            time.sleep(5)
+
+        self._take_screenshot("04_upload_timeout", full_page=True)
+        raise RuntimeError(f"视频上传超时（{timeout}s 未完成）")
+
     def _handle_confirm_dialog(self):
         """处理提示弹窗（JS 检测 .bcc-dialog，优先关闭类按钮，用原生鼠标点击）"""
         try:
@@ -508,74 +644,19 @@ class BilibiliUploader:
             return
 
         # ========== 步骤2：在弹窗内上传封面文件 ==========
-        # 在弹窗/浮层内查找 image file input（向上遍历父元素检查 modal/dialog/pop/uploader）
-        input_info = self.page.evaluate("""() => {
-            var inputs = document.querySelectorAll('input[type="file"]');
-            for (var inp of inputs) {
-                var acc = (inp.accept || '').toLowerCase();
-                if (acc.indexOf('image') !== -1 || acc.indexOf('png') !== -1 || acc.indexOf('jpg') !== -1) {
-                    // 向上遍历父元素，检查是否在弹窗内
-                    var p = inp.parentElement;
-                    var inModal = false;
-                    for (var i = 0; i < 12 && p; i++) {
-                        var c = (p.className || '').toString();
-                        if (c.indexOf('modal') !== -1 || c.indexOf('dialog') !== -1 || c.indexOf('pop') !== -1 || c.indexOf('uploader') !== -1) {
-                            inModal = true;
-                            break;
-                        }
-                        p = p.parentElement;
-                    }
-                    // 让 input 可见
-                    inp.style.display = 'block';
-                    inp.style.visibility = 'visible';
-                    inp.style.opacity = '1';
-                    return JSON.stringify({status: 'FOUND', accept: inp.accept, inModal: inModal});
-                }
-            }
-            return JSON.stringify({status: 'NO_INPUT', count: inputs.length});
-        }""")
-        if input_info:
-            input_res = _json.loads(input_info)
-            print(f"  📁 封面 file input: accept={input_res.get('accept','')} inModal={input_res.get('inModal', False)}")
-            if input_res.get("status") == "FOUND":
-                # 用 Playwright set_input_files 上传（优先找弹窗内的 image input）
-                image_input = None
-                all_inputs = self.page.query_selector_all('input[type="file"]')
-                for inp in all_inputs:
-                    accept = inp.get_attribute("accept") or ""
-                    if "image" in accept.lower() or "png" in accept.lower() or "jpg" in accept.lower():
-                        image_input = inp
-                        break
-                if not image_input and len(all_inputs) > 1:
-                    image_input = all_inputs[1]  # 兜底：第2个 file input
-
-                if image_input:
-                    # 确保 input 可见
-                    image_input.evaluate("""el => {
-                        el.style.display = 'block';
-                        el.style.visibility = 'visible';
-                        el.style.opacity = '1';
-                    }""")
-                    time.sleep(0.3)
-                    image_input.set_input_files(self.cover_path)
-                    print("  📂 封面文件已设置，等待上传处理...")
-                    time.sleep(5)
-                    self._take_screenshot("05_02_after_upload")
-                else:
-                    print("  ⚠️ 无法设置封面文件（未找到input），按ESC关闭")
-                    self.page.keyboard.press("Escape")
-                    time.sleep(1)
-                    return
-            else:
-                print(f"  ⚠️ 未找到封面 file input（共{input_res.get('count',0)}个input），按ESC关闭")
-                self.page.keyboard.press("Escape")
-                time.sleep(1)
-                return
-        else:
-            print("  ⚠️ 查找封面 file input 失败，按ESC关闭")
-            self.page.keyboard.press("Escape")
-            time.sleep(1)
-            return
+        # 先等弹窗把视频帧/默认封面异步加载完并稳定，再上传。
+        # Run #13 的失败原因：弹窗打开后默认封面仍在下方的异步加载中（05_01 为空、05_02 才出现视频帧），
+        # 此时 set_input_files 设置的文件没有进入上传器，最后“完成”应用的是 B站默认视频帧封面。
+        # 现在改为：等弹窗稳定 -> 点击“上传封面/拖拽图片或点击上传”走文件选择器 -> 校验文件真的进了 input。
+        self._wait_cover_modal_ready()
+        if not self._set_cover_file():
+            self._take_screenshot("05_02_upload_failed", full_page=True)
+            raise RuntimeError(
+                "封面文件未能加入 B 站封面上传器，已中止投稿（避免发布无封面/默认封面视频）"
+            )
+        print("  📂 封面文件已设置，等待上传处理...")
+        time.sleep(3)
+        self._take_screenshot("05_02_after_upload")
 
         # ========== 步骤3：勾选"双比例同步改动"复选框 ==========
         sync_info = self.page.evaluate("""() => {
@@ -690,6 +771,13 @@ class BilibiliUploader:
                 time.sleep(3)
                 self._take_screenshot("05_04_after_complete")
                 print("  ✅ 封面已上传")
+                if self._cover_present():
+                    print("  ✅ 表单已显示封面缩略图")
+                    score = self._form_cover_similarity()
+                    if score is not None and score > 55:
+                        print(f"  ⚠️ 表单封面与本地封面差异较大（{score:.1f}），可能应用了默认封面")
+                else:
+                    print("  ⚠️ 表单中暂未检测到封面缩略图，稍后重试")
             else:
                 print("  ⚠️ 未找到完成按钮，按ESC关闭")
                 self.page.keyboard.press("Escape")
@@ -698,6 +786,265 @@ class BilibiliUploader:
             print("  ⚠️ 完成按钮无响应，按ESC关闭")
             self.page.keyboard.press("Escape")
             time.sleep(1)
+
+    def _cover_modal_state(self):
+        """读取“封面制作”弹窗状态：图片数量、预览图数量、本地(blob/data)预览数、缩略图数"""
+        import json as _json
+        raw = self.page.evaluate("""() => {
+            var dialogs = document.querySelectorAll('.bcc-dialog, [class*="dialog"], [class*="modal"]');
+            var modal = null;
+            for (var d of dialogs) {
+                if (d.offsetParent !== null && (d.textContent || '').indexOf('封面制作') !== -1) { modal = d; break; }
+            }
+            if (!modal) return JSON.stringify({modal: false});
+            var imgs = Array.from(modal.querySelectorAll('img'));
+            var previews = 0, locals = 0, thumbs = 0;
+            for (var img of imgs) {
+                var r = img.getBoundingClientRect();
+                if (!r.width || !r.height) continue;
+                var src = img.src || '';
+                if (/^blob:|^data:image/.test(src)) locals++;
+                if (r.width >= 200 && r.height >= 120) previews++;
+                if (r.width <= 120 && r.height <= 80) thumbs++;
+            }
+            return JSON.stringify({modal: true, images: imgs.length, previews: previews, locals: locals, thumbs: thumbs});
+        }""")
+        return _json.loads(raw) if raw else {"modal": False}
+
+    def _wait_cover_modal_ready(self, timeout=12):
+        """等封面弹窗把视频帧/默认封面加载完并稳定，避免上传时机撞上异步重渲染"""
+        time.sleep(5)  # 给视频帧/默认封面异步加载留出时间
+        deadline = time.time() + timeout
+        last_key = None
+        stable = 0
+        while time.time() < deadline:
+            state = self._cover_modal_state()
+            if not state.get("modal"):
+                time.sleep(0.5)
+                continue
+            key = (state.get("images", 0), state.get("thumbs", 0), state.get("previews", 0))
+            if key == last_key:
+                stable += 1
+                if stable >= 2 and state.get("images", 0) > 0:
+                    break
+            else:
+                stable = 0
+                last_key = key
+            time.sleep(1)
+        time.sleep(1)
+        print(f"  🖼️ 封面弹窗状态: {self._cover_modal_state()}")
+
+    def _file_input_has_cover(self):
+        """检查页面 file input 是否真的持有了我们的封面文件"""
+        import json as _json
+        try:
+            name = os.path.basename(self.cover_path)
+            raw = self.page.evaluate("""(name) => {
+                const inputs = document.querySelectorAll('input[type="file"]');
+                for (const inp of inputs) {
+                    if (inp.files && inp.files.length > 0) {
+                        for (const f of inp.files) {
+                            if (f.name === name) return JSON.stringify({ok: true, name: f.name});
+                        }
+                    }
+                }
+                return JSON.stringify({ok: false, count: inputs.length});
+            }""", name)
+            info = _json.loads(raw) if raw else {"ok": False}
+            if info.get("ok"):
+                print(f"  ✅ file input 已持有封面文件: {info.get('name')}")
+            return bool(info.get("ok"))
+        except Exception:
+            return False
+
+    def _modal_has_local_preview(self):
+        """弹窗内是否出现本地文件预览（blob:/data:），可作为上传生效的佐证"""
+        return bool(self._cover_modal_state().get("locals"))
+
+    def _set_cover_file(self):
+        """把本地封面放进 B站封面上传器（文件选择器优先 + input 兜底 + 校验）"""
+        import json as _json
+
+        # 策略1：点击弹窗底部“上传封面/拖拽图片或点击上传”，走系统文件选择器
+        try:
+            raw = self.page.evaluate("""() => {
+                var dialogs = document.querySelectorAll('.bcc-dialog, [class*="dialog"], [class*="modal"]');
+                var modal = null;
+                for (var d of dialogs) {
+                    if (d.offsetParent !== null && (d.textContent || '').indexOf('封面制作') !== -1) { modal = d; break; }
+                }
+                var scope = modal || document;
+                var all = scope.querySelectorAll('span, div, p, button, label');
+                var best = null;
+                for (var el of all) {
+                    var t = (el.textContent || '').trim();
+                    if (t === '拖拽图片或点击上传' && el.offsetParent !== null && el.offsetWidth > 0) { best = el; break; }
+                }
+                if (!best) {
+                    for (var el of all) {
+                        var t = (el.textContent || '').trim();
+                        if (t.indexOf('上传封面') !== -1 && t.length < 12 && el.offsetParent !== null && el.offsetWidth < 220) { best = el; break; }
+                    }
+                }
+                if (!best) return JSON.stringify({status: 'NOT_FOUND'});
+                best.scrollIntoView({block: 'center'});
+                var r = best.getBoundingClientRect();
+                return JSON.stringify({
+                    status: 'FOUND',
+                    text: best.textContent.trim().substring(0, 20),
+                    x: r.x + r.width / 2,
+                    y: r.y + r.height / 2
+                });
+            }""")
+            pos = _json.loads(raw) if raw else {"status": "NOT_FOUND"}
+            print(f"  📍 封面上传区域: {pos}")
+            if pos.get("status") == "FOUND":
+                with self.page.expect_file_chooser(timeout=8000) as fc_info:
+                    self.page.mouse.move(pos["x"], pos["y"])
+                    time.sleep(0.2)
+                    self.page.mouse.click(pos["x"], pos["y"])
+                fc_info.value.set_files(self.cover_path)
+                print("  📂 已通过文件选择器设置封面文件")
+                time.sleep(1.5)
+                if self._file_input_has_cover() or self._modal_has_local_preview():
+                    return True
+                print("  ⚠️ 文件选择器设置后未检测到封面文件，尝试直接设置 file input")
+        except Exception as e:
+            print(f"  ⚠️ 文件选择器上传失败: {e}")
+
+        # 策略2：定位“拖拽图片或点击上传”所在容器内的 image input（精确对应封面上传器）
+        try:
+            raw = self.page.evaluate("""() => {
+                var allInputs = Array.from(document.querySelectorAll('input[type="file"]'));
+                var imageInputs = allInputs.filter(el => {
+                    var acc = (el.accept || '').toLowerCase();
+                    return acc.indexOf('image') !== -1 || acc.indexOf('png') !== -1 || acc.indexOf('jpg') !== -1;
+                });
+                var anchor = null;
+                for (var el of document.querySelectorAll('span, div, p')) {
+                    if ((el.textContent || '').trim() === '拖拽图片或点击上传' && el.offsetParent !== null) { anchor = el; break; }
+                }
+                if (!anchor) {
+                    for (var el of document.querySelectorAll('span, div, p, button')) {
+                        var t = (el.textContent || '').trim();
+                        if (t.indexOf('上传封面') !== -1 && t.length < 12 && el.offsetParent !== null && el.offsetWidth < 220) { anchor = el; break; }
+                    }
+                }
+                if (!anchor) return JSON.stringify({status: 'NO_ANCHOR'});
+                var p = anchor;
+                for (var depth = 0; depth < 8 && p; depth++) {
+                    for (var idx = 0; idx < imageInputs.length; idx++) {
+                        if (p.contains(imageInputs[idx])) {
+                            return JSON.stringify({status: 'FOUND', index: allInputs.indexOf(imageInputs[idx]), imageIndex: idx});
+                        }
+                    }
+                    p = p.parentElement;
+                }
+                return JSON.stringify({status: 'NO_INPUT_IN_CONTAINER'});
+            }""")
+            located = _json.loads(raw) if raw else {"status": "NO_ANCHOR"}
+            print(f"  📍 封面上传器 input: {located}")
+            if located.get("status") == "FOUND":
+                handles = self.page.query_selector_all('input[type="file"]')
+                target = handles[located["index"]] if located["index"] < len(handles) else None
+                if target:
+                    target.evaluate("el => { el.style.display='block'; el.style.visibility='visible'; el.style.opacity='1'; }")
+                    target.set_input_files(self.cover_path)
+                    time.sleep(1.0)
+                    if self._file_input_has_cover() or self._modal_has_local_preview():
+                        print("  📂 封面文件已设置（封面上传器 input）")
+                        return True
+                    print("  ⚠️ 封面上传器 input 未能接受封面文件")
+        except Exception as e:
+            print(f"  ⚠️ 定位封面上传器 input 失败: {e}")
+
+        # 策略3：逐个 image input 尝试（倒序：底部“上传封面”的 input 通常最后渲染）
+        try:
+            handles = self.page.query_selector_all('input[type="file"]')
+            candidates = []
+            for h in handles:
+                accept = (h.get_attribute("accept") or "").lower()
+                if "image" in accept or "png" in accept or "jpg" in accept:
+                    candidates.append(h)
+            print(f"  📁 找到 {len(candidates)} 个 image file input（共 {len(handles)} 个 input）")
+            for idx, h in enumerate(reversed(candidates)):
+                number = len(candidates) - idx
+                try:
+                    h.evaluate("el => { el.style.display='block'; el.style.visibility='visible'; el.style.opacity='1'; }")
+                    h.set_input_files(self.cover_path)
+                    time.sleep(1.0)
+                    if self._file_input_has_cover() or self._modal_has_local_preview():
+                        print(f"  📂 封面文件已设置（image input #{number}）")
+                        return True
+                    print(f"  ⚠️ image input #{number} 未接受封面文件")
+                except Exception as e:
+                    print(f"  ⚠️ image input #{number} 设置失败: {e}")
+        except Exception as e:
+            print(f"  ⚠️ 遍历 image input 失败: {e}")
+
+        return False
+
+    def _form_cover_similarity(self):
+        """对比表单封面缩略图与本地封面，返回平均像素差（越小越像），失败返回 None"""
+        try:
+            from PIL import Image, ImageChops, ImageStat
+
+            best_handle = None
+            for h in self.page.query_selector_all('[class*="cover"] img'):
+                if not h.is_visible():
+                    continue
+                box = h.bounding_box()
+                if not box:
+                    continue
+                if 100 <= box["width"] <= 420 and 50 <= box["height"] <= 320:
+                    best_handle = h
+                    break
+            if not best_handle:
+                return None
+            thumb_path = os.path.join(self.work_dir, "cover_applied_thumb.png")
+            best_handle.screenshot(path=thumb_path)
+            with Image.open(self.cover_path) as a_img, Image.open(thumb_path) as b_img:
+                a = a_img.convert("RGB").resize((48, 48), Image.LANCZOS)
+                b = b_img.convert("RGB").resize((48, 48), Image.LANCZOS)
+            diff = ImageChops.difference(a, b)
+            score = sum(ImageStat.Stat(diff).mean) / 3.0
+            print(f"  🔍 表单封面与本地封面差异: {score:.1f}（越小越接近）")
+            return score
+        except Exception as e:
+            print(f"  ⚠️ 封面比对失败: {e}")
+            return None
+
+    def _cover_present(self):
+        """检测投稿表单中是否已显示封面缩略图"""
+        try:
+            raw = self.page.evaluate("""() => {
+                const imgs = Array.from(document.querySelectorAll('img'));
+                const hits = [];
+                for (const img of imgs) {
+                    const src = img.src || '';
+                    if (!src) continue;
+                    const r = img.getBoundingClientRect();
+                    if (r.width < 100 || r.height < 50) continue;
+                    if (r.width > 800 || r.height > 500) continue;
+                    let p = img.parentElement, inCover = false, excluded = false;
+                    for (let i = 0; i < 12 && p; i++) {
+                        const c = ((p.className || '').toString()).toLowerCase();
+                        if (c.indexOf('recommend') !== -1 || c.indexOf('system') !== -1) excluded = true;
+                        if (c.indexOf('cover') !== -1) { inCover = true; break; }
+                        p = p.parentElement;
+                    }
+                    if (inCover && !excluded) hits.push(src.slice(0, 100));
+                }
+                return JSON.stringify({count: hits.length, hits: hits.slice(0, 3)});
+            }""")
+            import json as _json
+            info = _json.loads(raw) if raw else {"count": 0}
+            if info.get("count", 0) > 0:
+                print(f"  🖼️ 封面缩略图: {info.get('hits', [])[:1]}")
+                return True
+        except Exception as e:
+            print(f"  ⚠️ 封面检测失败: {e}")
+        return False
 
     def _fill_title(self):
         """填写标题"""
@@ -954,6 +1301,8 @@ class BilibiliUploader:
         5. 未检测到 URL 跳转不报错，仅记录日志后继续轮询 BV 号
         """
         print("  📤 提交投稿...")
+        # 双保险：投稿前再次确认视频已上传到 100%（已确认过则立即返回）
+        self._wait_for_upload_complete()
         self._take_screenshot("11_before_submit", full_page=True)
         # 先关闭可能存在的弹窗（调用两次，可能有多层弹窗）
         print("  🔍 检查并关闭已有弹窗...")
@@ -1059,21 +1408,116 @@ class BilibiliUploader:
         time.sleep(5)
         self._take_screenshot("11_after_confirm", full_page=True)
 
-        # 检查 URL 跳转
-        url = self.page.url
-        if "/video/manage" in url or "/platform/edit" in url:
-            print(f"  ✅ 投稿已提交，跳转到: {url}")
-            return
+        # 等待投稿真正被受理：优先用投稿接口返回的 BV，其次看 URL 跳转
+        deadline = time.time() + 300  # 5 分钟
+        while time.time() < deadline:
+            bvid = self._extract_bvid_from_submit_responses()
+            if bvid:
+                self.submit_bvid = bvid
+                print(f"  ✅ 投稿已受理，BV 号: {bvid}")
+                return
 
-        # 检查是否有错误提示
-        error_msg = self._check_submit_errors()
-        if error_msg:
-            self._take_screenshot("submit_error")
-            raise RuntimeError(f"投稿提交失败: {error_msg}")
+            url = self.page.url
+            if "/video/manage" in url or "/platform/edit" in url:
+                print(f"  ✅ 投稿已提交，跳转到: {url}")
+                return
+
+            # 检查是否有错误提示
+            error_msg = self._check_submit_errors()
+            if error_msg:
+                self._take_screenshot("submit_error")
+                raise RuntimeError(f"投稿提交失败: {error_msg}")
+
+            time.sleep(5)
+            snippet = self._get_body_text()[:300]
+            if "等待视频上传完成" in snippet:
+                print("  ⚠️ B站提示“等待视频上传完成后会自动提交”，继续等待...")
 
         # 无跳转也无错误，可能投稿在后台处理中，继续轮询 BV 号
-        print(f"  ⚠️ 未检测到 URL 跳转（当前: {url}），但未发现错误提示，继续轮询 BV 号")
+        print(f"  ⚠️ 5 分钟内未拿到 BV/跳转（当前: {self.page.url}），继续轮询")
         self._take_screenshot("11_final_check", full_page=True)
+
+    def _get_body_text(self):
+        """读取页面正文文本（失败返回空串）"""
+        try:
+            return self.page.evaluate("() => (document.body && document.body.innerText) || ''") or ""
+        except Exception:
+            return ""
+
+    def _find_bvid_in_obj(self, obj):
+        """递归查找 JSON 中的 bvid 字段"""
+        if isinstance(obj, dict):
+            for key, value in obj.items():
+                if str(key).lower() == "bvid" and isinstance(value, str) and value.startswith("BV"):
+                    return value
+            for value in obj.values():
+                found = self._find_bvid_in_obj(value)
+                if found:
+                    return found
+        elif isinstance(obj, list):
+            for value in obj:
+                found = self._find_bvid_in_obj(value)
+                if found:
+                    return found
+        return None
+
+    def _extract_bvid_from_submit_responses(self):
+        """从拦截到的投稿接口响应中提取 BV 号"""
+        import re
+        for resp in list(self._submit_api_responses):
+            try:
+                data = resp.json()
+                bvid = self._find_bvid_in_obj(data)
+                if bvid:
+                    return bvid
+            except Exception:
+                pass
+            try:
+                text = resp.text()
+                match = re.search(r"(BV[a-zA-Z0-9]{10})", text or "")
+                if match:
+                    return match.group(1)
+            except Exception:
+                pass
+        return None
+
+    def _find_recent_bvid_via_member_api(self, title_prefix):
+        """在已登录的浏览器里调用创作中心接口，按标题匹配最新稿件
+
+        比抓个人空间页面稳定：个人空间有风控，创作中心接口使用同一登录态。
+        """
+        try:
+            raw = self.page.evaluate("""async (titlePrefix) => {
+                const urls = [
+                    'https://member.bilibili.com/x/web/archives?status=is_pubing,pubed,not_pubed&pn=1&ps=20&coined=0',
+                    'https://member.bilibili.com/x/web/archives?status=all&pn=1&ps=20'
+                ];
+                for (const u of urls) {
+                    try {
+                        const r = await fetch(u, { credentials: 'include' });
+                        const j = await r.json();
+                        if (j && j.code === 0 && j.data && Array.isArray(j.data.arc_audits)) {
+                            const items = j.data.arc_audits.map(x => x.Archive || x.archive || x);
+                            for (const a of items) {
+                                if (a.bvid && a.title && a.title.indexOf(titlePrefix) !== -1) {
+                                    return JSON.stringify({ ok: true, bvid: a.bvid, title: a.title });
+                                }
+                            }
+                            return JSON.stringify({ ok: true, bvid: null, count: items.length });
+                        }
+                    } catch (e) {}
+                }
+                return JSON.stringify({ ok: false });
+            }""", title_prefix)
+            import json as _json
+            result = _json.loads(raw) if raw else {"ok": False}
+            if result.get("bvid"):
+                return result["bvid"]
+            if result.get("ok"):
+                print(f"  ⏳ 创作中心有 {result.get('count', 0)} 个稿件，暂无标题匹配「{title_prefix}」")
+        except Exception as e:
+            print(f"  ⚠️ 创作中心接口查询失败: {e}")
+        return None
 
     def _retry_handle_dialog(self, max_retries):
         """重试处理确认弹窗（弹窗可能延迟出现）"""
@@ -1236,12 +1680,19 @@ class BilibiliUploader:
             return []
 
     def _wait_for_bvid(self):
-        """轮询个人空间获取 BV 号（仅按标题匹配，避免误匹配其他视频）"""
-        print("  🔍 轮询个人空间获取 BV 号...")
+        """获取 BV 号（投稿接口 → 创作中心接口 → 个人空间页面，逐级兜底）"""
+        print("  🔍 获取 BV 号...")
         title_prefix = self.title[:8] if len(self.title) >= 8 else self.title
 
-        # 优先从当前页面 URL 提取 BV（提交成功后可能跳转到投稿管理页）
-        for attempt in range(3):
+        # 1) 投稿接口返回值（最可靠）
+        for attempt in range(6):
+            if self.submit_bvid:
+                print(f"  ✅ 从投稿接口获取 BV 号: {self.submit_bvid}")
+                return self.submit_bvid
+            bvid = self._extract_bvid_from_submit_responses()
+            if bvid:
+                print(f"  ✅ 从投稿接口获取 BV 号: {bvid}")
+                return bvid
             try:
                 url = self.page.url
                 bvid = self._extract_bvid(url)
@@ -1252,38 +1703,51 @@ class BilibiliUploader:
                 pass
             time.sleep(3)
 
+        # 2) 创作中心接口 + 3) 个人空间页面轮询
         deadline = time.time() + 600  # 10 分钟
+        attempt = 0
         while time.time() < deadline:
-            try:
-                uid = self._get_uid()
-                if uid:
-                    space_url = self.SPACE_URL_TEMPLATE.format(uid=uid)
-                    space_page = self.context.new_page()
-                    space_page.goto(space_url, wait_until="domcontentloaded", timeout=60000)
-                    time.sleep(3)
-                    self.page.screenshot(path=os.path.join(self.work_dir, "12_personal_space.png"), full_page=False)
-                    print("  📸 个人空间截图已保存")
+            attempt += 1
 
-                    # 查找标题匹配的视频链接（仅按标题前缀匹配，不匹配任意 /BV 链接）
-                    links = space_page.query_selector_all("a[href*='/video/BV']")
-                    match_count = 0
-                    for link in links:
-                        href = link.get_attribute("href") or ""
-                        link_text = (link.inner_text() or "").strip()
-                        # 仅按标题前缀匹配，避免误匹配个人空间里的其他视频
-                        if title_prefix in link_text:
-                            bvid = self._extract_bvid(href)
-                            if bvid:
-                                match_count += 1
-                                space_page.close()
-                                print(f"  ✅ 已获取 BV 号: {bvid}（标题匹配）")
-                                return bvid
-                    if match_count == 0 and links:
-                        print(f"  ⏳ 个人空间有 {len(links)} 个视频，暂无标题匹配「{title_prefix}」的，继续轮询...")
-                    space_page.close()
-            except Exception:
-                pass
-            time.sleep(60)
+            bvid = self._find_recent_bvid_via_member_api(title_prefix)
+            if bvid:
+                print(f"  ✅ 已获取 BV 号: {bvid}（创作中心匹配）")
+                return bvid
+
+            # 每 3 轮才抓一次个人空间，减少风控
+            if attempt % 3 == 1:
+                try:
+                    uid = self._get_uid()
+                    if uid:
+                        space_url = self.SPACE_URL_TEMPLATE.format(uid=uid)
+                        space_page = self.context.new_page()
+                        try:
+                            space_page.goto(space_url, wait_until="domcontentloaded", timeout=60000)
+                            time.sleep(3)
+                            space_page.screenshot(
+                                path=os.path.join(self.work_dir, "12_personal_space.png"),
+                                full_page=False,
+                            )
+                            print("  📸 个人空间截图已保存")
+
+                            # 查找标题匹配的视频链接（仅按标题前缀匹配，不匹配任意 /BV 链接）
+                            links = space_page.query_selector_all("a[href*='/video/BV']")
+                            for link in links:
+                                href = link.get_attribute("href") or ""
+                                link_text = (link.inner_text() or "").strip()
+                                if title_prefix in link_text:
+                                    bvid = self._extract_bvid(href)
+                                    if bvid:
+                                        print(f"  ✅ 已获取 BV 号: {bvid}（标题匹配）")
+                                        return bvid
+                            if links:
+                                print(f"  ⏳ 个人空间有 {len(links)} 个视频，暂无标题匹配「{title_prefix}」，继续轮询...")
+                        finally:
+                            space_page.close()
+                except Exception:
+                    pass
+
+            time.sleep(30)
 
         print("  ⚠️ 超时未获取到 BV 号（视频可能仍在审核中）")
         return None
