@@ -413,10 +413,15 @@ class BilibiliUploader:
             }
             const bodyMatch = text.match(/(\d{1,3})\s*%/g) || [];
             const bodyPercents = bodyMatch.map(s => parseInt(s));
+            // 注意：上传页常驻提示“信息填完后，就可投稿！不需等待上传完成哦～”也包含“上传完成”，
+            // 必须先剔除这类提示，否则会立刻误判为上传完成（Run #14 就是这样）。
+            const sanitized = text
+                .replace(/不需等待上传完成[^\n]*/g, '')
+                .replace(/无需等待上传完成[^\n]*/g, '');
             const waitingSubmit = /等待视频上传完成/.test(text);
             return JSON.stringify({
-                hasFail: /上传失败|上传出错|上传中断/.test(text),
-                hasDone: /上传完成|上传成功/.test(text) && !waitingSubmit,
+                hasFail: /上传失败|上传出错|上传中断/.test(sanitized),
+                hasDone: /上传完成|上传成功/.test(sanitized) && !waitingSubmit,
                 waitingSubmit: waitingSubmit,
                 hasUploading: /上传中|正在上传|MB\/s|MB\/S/.test(text),
                 maxProgressPercent: percents.length ? Math.max(...percents) : null,
@@ -458,19 +463,21 @@ class BilibiliUploader:
                 self._take_screenshot("04_upload_failed", full_page=True)
                 raise RuntimeError(f"视频上传失败：{state.get('snippet', '')[:200]}")
 
-            if state.get("hasDone"):
+            percent = state.get("maxProgressPercent")
+            if percent is None:
+                percent = state.get("maxBodyPercent")
+
+            # “上传完成”文案只有在没有进度或进度已到 100% 时才可信，
+            # 避免页面上其他提示文案干扰（进度 87% 时不可能已完成）。
+            if state.get("hasDone") and (percent is None or percent >= 100):
                 print(f"  ✅ 视频上传完成（页面提示，耗时 {elapsed}s）")
                 time.sleep(3)
                 self._take_screenshot("04_after_upload_complete", full_page=True)
                 return
 
-            percent = state.get("maxProgressPercent")
-            if percent is None:
-                percent = state.get("maxBodyPercent")
-
             if percent is not None:
                 no_progress_checks = 0
-                if last_percent is None or percent > last_percent:
+                if last_percent is None or percent != last_percent:
                     last_percent = percent
                     last_change = time.time()
                 if percent >= 100:
