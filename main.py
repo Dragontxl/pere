@@ -1210,7 +1210,19 @@ def _derive_metrics(text: str, max_items: int = 4) -> list:
     if not text:
         return []
 
-    # 1. 将中文货币组合合并为单个数值，避免「600块8毛1」被拆成 600/8/1
+    # 1. 移除日期格式，避免「2026年11月」「2026-11-09」被拆成多个无意义数字
+    #    日期不是数据指标，直接从文本中剔除
+    #    支持：YYYY年MM月(日/号)、YYYY-MM-DD、YYYY/MM/DD、纯 YYYY年
+    text = re.sub(r'\d{4}年\d{1,2}月(?:[日号])?', '', text)
+    text = re.sub(r'\d{4}[-/.]\d{1,2}[-/.]\d{1,2}日?', '', text)
+    text = re.sub(r'\d{4}年', '', text)
+
+    # 2. 合并千分位逗号，避免「5,528」被拆成 5 和 528
+    #    匹配 \d{1,3}(,\d{3})+ 形式，如 5,528、1,234,567
+    text = re.sub(r'\d{1,3}(?:,\d{3})+',
+                  lambda m: m.group(0).replace(',', ''), text)
+
+    # 3. 将中文货币组合合并为单个数值，避免「600块8毛1」被拆成 600/8/1
     #    匹配模式：X块[Y毛/角][Z分]，支持简写形式
     #    （无毛/分标记时，首个数字即毛，如「8块6」→8.6）
     currency_re = re.compile(
@@ -1247,7 +1259,7 @@ def _derive_metrics(text: str, max_items: int = 4) -> list:
 
     processed = currency_re.sub(_currency_replace, text)
 
-    # 2. 从合并后的文本中提取数字+单位
+    # 4. 从合并后的文本中提取数字+单位
     matches = re.findall(
         r'(\d+(?:\.\d+)?)\s*(万亿|亿元|万元|亿|万|%|％|家|人|元|倍)?',
         processed
