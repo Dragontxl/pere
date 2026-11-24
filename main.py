@@ -1870,15 +1870,33 @@ def rerender_clips(work_dir, config: dict, render_params: dict, args) -> str:
     """
     work_dir = Path(work_dir)
 
-    # 加载中间产物
-    scenes_path = work_dir / "scenes.json"
-    decisions_path = work_dir / "decisions.json"
-    match_path = work_dir / "match_results.json"
+    # 构建 R2 配置（CI 重渲染时工作目录为空，中间产物仅存于 R2，必须走下载）
+    r2_config = None
+    if args.r2_bucket and args.r2_access_key_id and args.r2_secret_access_key and args.r2_endpoint:
+        r2_config = {
+            "bucket": args.r2_bucket,
+            "access_key_id": args.r2_access_key_id,
+            "secret_access_key": args.r2_secret_access_key,
+            "endpoint": args.r2_endpoint,
+        }
 
-    if not scenes_path.exists():
-        print(f"❌ 未找到分镜文件: {scenes_path}")
+    # 加载中间产物：优先本地，缺失则从 R2 下载（与 render_shard 一致，CI 工作目录为空必须走 R2）
+    scenes_path = load_phase_artifact("scenes.json", work_dir, args.task_id, args.r2_prefix, r2_config)
+    decisions_path = load_phase_artifact("decisions.json", work_dir, args.task_id, args.r2_prefix, r2_config)
+    match_path = load_phase_artifact("match_results.json", work_dir, args.task_id, args.r2_prefix, r2_config)
+
+    if not scenes_path or not decisions_path or not match_path:
+        missing = [
+            name for name, p in [
+                ("scenes.json", scenes_path),
+                ("decisions.json", decisions_path),
+                ("match_results.json", match_path),
+            ]
+            if not p
+        ]
+        print(f"❌ 未找到中间产物: {', '.join(missing)}（本地与 R2 均无）")
         print(f"   请先运行完整管线生成中间产物，或用 --output-dir 指定正确的工作目录")
-        raise FileNotFoundError(f"分镜文件不存在: {scenes_path}")
+        raise FileNotFoundError(f"中间产物不存在: {', '.join(missing)}")
 
     # 解析 scenes.json → Scene 对象
     with open(scenes_path, "r", encoding="utf-8") as f:
