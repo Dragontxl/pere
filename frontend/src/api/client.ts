@@ -303,6 +303,44 @@ export const fileApi = {
   getAdminDownloadUrl(key: string): string {
     return `${API_BASE}/admin/files/download/${encodeURIComponent(key.split('/').pop() || key)}?prefix=${encodeURIComponent(key.includes('/') ? key.substring(0, key.lastIndexOf('/') + 1) : '')}`;
   },
+
+  /**
+   * 下载管理端文件（带鉴权，转 blob 触发浏览器下载）。
+   *
+   * 不能直接用 <a href> 下载：浏览器下载请求不携带 Authorization 头，
+   * 而 /admin/files/download 需要鉴权，会返回 401 JSON，Chrome 报
+   * 「无法从网站上提取文件」。改为 fetch 带鉴权头，转 blob 后触发下载。
+   */
+  async downloadAdminFile(key: string, fallbackName?: string): Promise<void> {
+    const url = this.getAdminDownloadUrl(key);
+    const token = getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+      let msg = `下载失败 (${response.status})`;
+      try {
+        const data = await response.json() as ApiResponse<unknown>;
+        if (data.msg) msg = data.msg;
+      } catch {
+        // 非 JSON 响应，保留默认消息
+      }
+      throw new Error(msg);
+    }
+
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = fallbackName || key.split('/').pop() || 'download';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(blobUrl);
+  },
 };
 
 // ── BGM ────────────────────────────────────────────────────────────────
