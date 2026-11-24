@@ -1268,7 +1268,7 @@ def _derive_metrics(text: str, max_items: int = 4) -> list:
     return metrics if len(metrics) >= 1 else []
 
 
-def render_remotion_scene(scene, duration, output_path, config: dict, render_params: dict, background_image=None, seg_idx=0):
+def render_remotion_scene(scene, duration, output_path, config: dict, render_params: dict, background_image=None, seg_idx=0, visual_type=None):
     """渲染 Remotion 编码视频片段
 
     通过 subprocess 调用 Node.js 渲染脚本，传入场景参数。
@@ -1283,6 +1283,9 @@ def render_remotion_scene(scene, duration, output_path, config: dict, render_par
         background_image: 背景图片路径，提供给 Remotion 模板作为全屏背景，
             消除 Remotion 片段与图片片段的风格割裂
         seg_idx: 段序号（同场景拆分多段时区分临时文件名，默认 0）
+        visual_type: 覆盖场景类型（兜底文字卡必须传 text_animation：
+            scene.visual_type 可能是 landscape/concept 等 Remotion 不支持的模板，
+            直接透传会让文字卡兜底必然失败）
 
     Returns:
         视频路径或 None（渲染失败时）
@@ -1336,17 +1339,20 @@ def render_remotion_scene(scene, duration, output_path, config: dict, render_par
     with open(props_path, "w", encoding="utf-8") as f:
         json.dump(props, f, ensure_ascii=False, indent=2)
 
+    # 场景模板：显式传入的 visual_type 优先（文字卡兜底固定用 text_animation）
+    scene_visual_type = visual_type or scene.visual_type
+
     # 构建渲染命令 —— 传相对文件名，避免 Remotion CLI 路径解析问题
     cmd = [
         "node",
         str(render_script),
-        "--scene", scene.visual_type,
+        "--scene", scene_visual_type,
         "--props", props_path.name,
         "--output", str(output_path),
     ]
 
     try:
-        print(f"    🎬 渲染 Remotion: {scene.visual_type} ({duration:.1f}s)")
+        print(f"    🎬 渲染 Remotion: {scene_visual_type} ({duration:.1f}s)")
         if bg_filename:
             print(f"    🖼️ 背景图片: {bg_filename}")
         result = subprocess.run(
@@ -1395,8 +1401,11 @@ def _validate_clip(clip_path: str) -> bool:
     if not os.path.exists(clip_path):
         return False
 
-    # 文件大小检查：低于 200KB 视为损坏（1帧0秒视频约 35-130KB）
-    if os.path.getsize(clip_path) < 204_800:
+    # 低码率片段（纯色底图 / 静止文字卡）可能只有几十 KB。
+    # 之前用 200KB 阈值判定损坏，把合法的纯色兜底片段全部误杀
+    # （Run 45324299443：19 个镜头因此所有渲染路径失败，成片缺解说）。
+    # 这里只拦真正的空文件，有效性交给 ffprobe 判定。
+    if os.path.getsize(clip_path) < 10_240:
         return False
 
     # ffprobe 检查帧数和时长（跨平台解析：优先 shutil.which，再从 ffmpeg 同目录推导）
@@ -1414,23 +1423,32 @@ def _validate_clip(clip_path: str) -> bool:
         return True
 
     try:
-        import subprocess
-        result = subprocess.run(
-            [ffprobe_exe, "-v", "error", "-select_streams", "v:0",
-             "-count_frames", "-show_entries",
-             "stream=nb_read_frames,duration",
-             "-of", "json", clip_path],
-            capture_output=True, text=True,
-            encoding="utf-8", errors="replace", timeout=15
-        )
-        if result.returncode != 0:
-            return False
-
         import json
-        data = json.loads(result.stdout)
-        stream = data.get("streams", [{}])[0]
-        nb_frames = int(stream.get("nb_read_frames", "0"))
-        duration = float(stream.get("duration", "0"))
+        import subprocess
+
+        def _probe(extra_args):
+            result = subprocess.run(
+                [ffprobe_exe, "-v", "error", "-select_streams", "v:0",
+                 *extra_args,
+                 "-of", "json", clip_path],
+                capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=30
+            )
+            if result.returncode != 0:
+                return None
+            data = json.loads(result.stdout)
+            streams = data.get("streams") or []
+            return streams[0] if streams else None
+
+        # 先读元数据（毫秒级）；元数据缺帧数时才完整解码统计
+        stream = _probe(["-show_entries", "stream=nb_frames,duration"])
+        if not stream:
+            return False
+        duration = float(stream.get("duration") or 0)
+        nb_frames = int(stream.get("nb_frames") or 0)
+        if nb_frames <= 0:
+            counted = _probe(["-count_frames", "-show_entries", "stream=nb_read_frames"])
+            nb_frames = int((counted or {}).get("nb_read_frames") or 0)
 
         return nb_frames > 0 and duration > 0.1
     except Exception:
@@ -1616,7 +1634,12 @@ def _render_single_scene(
             lambda: _render_remotion_path(
                 scene, seg_duration, clip_path, final_clip_path,
                 config, render_params, audio_segment_path, subtitle_text,
-                crf, enable_subtitle, None, seg_idx
+                crf, enable_subtitle, None, seg_idx,
+                # 关键：文字卡必须用 text_animation 模板。
+                # scene.visual_type 可能是 landscape/concept/portrait 等
+                # Remotion 不支持的模板，透传会导致兜底必然失败
+                # （Run 45324299443 中 19 个镜头因此整段丢失）。
+                scene_type="text_animation",
             ),
             "文字卡兜底"
         )
@@ -1642,11 +1665,12 @@ def _render_single_scene(
 def _render_remotion_path(scene, seg_duration, clip_path, final_clip_path,
                           config, render_params, audio_segment_path,
                           subtitle_text, crf, enable_subtitle,
-                          background_image, seg_idx):
+                          background_image, seg_idx, scene_type=None):
     """Remotion 渲染 + 最终化，返回 (scene, final_clip_path) 或 None"""
     result = render_remotion_scene(
         scene, seg_duration, str(clip_path), config, render_params,
-        background_image=background_image, seg_idx=seg_idx
+        background_image=background_image, seg_idx=seg_idx,
+        visual_type=scene_type,
     )
     if not result:
         return None
