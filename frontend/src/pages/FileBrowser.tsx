@@ -152,6 +152,14 @@ export default function FileBrowser() {
     }
   };
 
+  const handleDownload = async (key: string, fallbackName?: string) => {
+    try {
+      await fileApi.downloadAdminFile(key, fallbackName);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '下载失败');
+    }
+  };
+
   const handleSelect = (key: string) => {
     setSelectedKeys((prev) => {
       const next = new Set(prev);
@@ -345,13 +353,12 @@ export default function FileBrowser() {
                   <td>{formatDate(file.lastModified)}</td>
                   <td>
                     <div className="file-actions">
-                      <a
+                      <button
                         className="btn btn-ghost btn-sm"
-                        href={fileApi.getAdminDownloadUrl(file.key)}
-                        download
+                        onClick={() => handleDownload(file.key, file.name)}
                       >
                         下载
-                      </a>
+                      </button>
                       <button
                         className="btn btn-danger btn-sm"
                         onClick={() => handleDelete(file.key, false)}
@@ -418,13 +425,12 @@ export default function FileBrowser() {
               <FilePreview file={previewItem} />
             </div>
             <div className="modal-actions">
-              <a
+              <button
                 className="btn btn-primary"
-                href={fileApi.getAdminDownloadUrl(previewItem.key)}
-                download
+                onClick={() => handleDownload(previewItem.key, previewItem.name)}
               >
                 ⬇ 下载
-              </a>
+              </button>
               <button className="btn btn-ghost" onClick={() => setPreviewItem(null)}>
                 关闭
               </button>
