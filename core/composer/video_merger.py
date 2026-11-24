@@ -81,9 +81,11 @@ def _normalize_clip_pix_fmt(path: str, target_pix_fmt: str) -> str:
     ).name
     cmd = [
         FFMPEG_EXE, "-y", "-i", path,
-        "-c:v", "libx264", "-preset", "veryfast",
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18",
         "-pix_fmt", target_pix_fmt,
         "-c:a", "copy",
+        # 首帧 DTS 归零，避免 concat 流拷贝时接缝处时间戳异常
+        "-avoid_negative_ts", "make_zero",
         "-movflags", "+faststart",
         tmp_out,
     ]
@@ -131,6 +133,7 @@ def _validate_concat_output(output_path: str, expected_durations: list) -> bool:
                 encoding="utf-8", errors="replace", timeout=15
             )
             if result.returncode != 0:
+                print("  [WARN] 拼接校验失败: ffprobe 无法读取输出文件")
                 return False
 
             import json
@@ -139,13 +142,19 @@ def _validate_concat_output(output_path: str, expected_durations: list) -> bool:
             has_video = any(s.get("codec_type") == "video" for s in streams)
             has_audio = any(s.get("codec_type") == "audio" for s in streams)
             if not has_video or not has_audio:
+                print(f"  [WARN] 拼接校验失败: 缺少流 video={has_video} audio={has_audio}")
                 return False
 
             out_duration = float(data.get("format", {}).get("duration", "0"))
             expected = sum(expected_durations) if expected_durations else out_duration
             if expected > 0.1 and abs(out_duration - expected) / expected > 0.15:
+                print(
+                    f"  [WARN] 拼接校验失败: 输出时长 {out_duration:.1f}s，"
+                    f"预期 {expected:.1f}s（偏差 {abs(out_duration - expected) / expected:.0%}）"
+                )
                 return False
-        except Exception:
+        except Exception as e:
+            print(f"  [WARN] 拼接校验失败: 探测输出异常 {e}")
             return False
     else:
         # 无 ffprobe：用 ffmpeg 兜底探测
@@ -195,8 +204,11 @@ def _validate_concat_output(output_path: str, expected_durations: list) -> bool:
         if os.path.exists(probe_frame2):
             os.unlink(probe_frame2)
 
+        if not (ok_start and ok_end):
+            print(f"  [WARN] 拼接校验失败: 帧解码 ok_start={ok_start} ok_end={ok_end}")
         return ok_start and ok_end
-    except Exception:
+    except Exception as e:
+        print(f"  [WARN] 拼接校验失败: 帧解码异常 {e}")
         return False
 
 
@@ -258,7 +270,7 @@ def merge_clips_stream_copy(clip_paths: list, output_path: str) -> str:
                 new_path = _normalize_clip_pix_fmt(path, target_pix)
                 normalized_files.append(new_path)
                 normalized_paths.append(new_path)
-                print(f"  🔧 归一化像素格式: {os.path.basename(path)} "
+                print(f"  [NORM] 归一化像素格式: {os.path.basename(path)} "
                       f"{p['pix_fmt']} → {target_pix}")
             else:
                 normalized_paths.append(path)
@@ -309,7 +321,47 @@ def merge_clips_stream_copy(clip_paths: list, output_path: str) -> str:
 
         # 拼接后校验：探测输出文件，确认视频流和音频流均可正常解码
         # 纯 -c copy 拼接可能产出容器正常但内容损坏的文件（ffmpeg 返回 0 但数据无效）
-        validated = _validate_concat_output(output_path, [p["duration"] for p in params_list])
+        expected_durations = [p["duration"] for p in params_list]
+        validated = _validate_concat_output(output_path, expected_durations)
+        if not validated:
+            # 直接 MP4 拷贝校验不通过时，先尝试 MPEG-TS 中转：
+            # TS 对时间戳/参数集变化更宽容，常能把 300+ 片段的拷贝拼接救回来，
+            # 避免直接回退到整片全量重编码（超长视频要十几分钟）。
+            print("  [RETRY] 直接 MP4 拷贝校验未通过，尝试 MPEG-TS 中转重试流拷贝...")
+            ts_path = output_path + ".concat.ts"
+            try:
+                ts_cmd = [
+                    FFMPEG_EXE, "-y",
+                    "-f", "concat", "-safe", "0",
+                    "-i", list_file,
+                    "-c:v", "copy",
+                    "-c:a", "aac", "-b:a", "128k",
+                    "-f", "mpegts",
+                    ts_path,
+                ]
+                ts_result = subprocess.run(
+                    ts_cmd, capture_output=True, text=True,
+                    encoding="utf-8", errors="replace", timeout=180
+                )
+                if ts_result.returncode != 0 or not os.path.exists(ts_path) or os.path.getsize(ts_path) == 0:
+                    raise RuntimeError(f"TS 中转拼接失败: {ts_result.stderr.strip()[-500:]}")
+                remux_cmd = [
+                    FFMPEG_EXE, "-y", "-i", ts_path,
+                    "-c", "copy", "-bsf:a", "aac_adtstoasc",
+                    "-movflags", "+faststart",
+                    output_path,
+                ]
+                remux = subprocess.run(
+                    remux_cmd, capture_output=True, text=True,
+                    encoding="utf-8", errors="replace", timeout=180
+                )
+                if remux.returncode != 0 or not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+                    raise RuntimeError(f"TS 中转重封装失败: {remux.stderr.strip()[-500:]}")
+                validated = _validate_concat_output(output_path, expected_durations)
+            finally:
+                if os.path.exists(ts_path):
+                    os.unlink(ts_path)
+
         if not validated:
             raise RuntimeError("流拷贝拼接产出损坏文件，回退重编码拼接")
     except subprocess.TimeoutExpired:
@@ -361,13 +413,42 @@ def _probe_with_ffmpeg(path: str) -> dict | None:
     return {"nb_frames": -1, "duration": duration, "pix_fmt": ""}
 
 
+# 片段最小字节数：纯色/文字卡这类低码率片段可能只有几十 KB，
+# 不能用 200KB 之类的阈值判定损坏（会把合法片段误删，导致成片缺段）。
+_MIN_CLIP_BYTES = 4096
+
+
+def _count_clip_frames(path: str) -> int:
+    """精确统计视频帧数（-count_frames 会完整解码，较慢，仅在元数据缺帧数时用）"""
+    import json
+    try:
+        result = subprocess.run(
+            [FFPROBE_EXE, "-v", "error", "-select_streams", "v:0",
+             "-count_frames", "-show_entries", "stream=nb_read_frames",
+             "-of", "json", path],
+            capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=180
+        )
+        if result.returncode != 0:
+            return 0
+        data = json.loads(result.stdout)
+        streams = data.get("streams") or []
+        return int(streams[0].get("nb_read_frames") or 0) if streams else 0
+    except Exception:
+        return 0
+
+
 def _probe_clip_info(path: str) -> dict | None:
     """获取片段信息，损坏返回 None（ffprobe 缺失时自动退回 ffmpeg）
+
+    先用元数据读取时长/帧数（毫秒级），只有元数据缺帧数时才用
+    -count_frames 精确统计。之前对全部 300+ 片段逐个 -count_frames
+    完整解码，光预检就要好几分钟。
 
     Returns:
         dict 含 nb_frames, duration, pix_fmt 等；损坏时返回 None
     """
-    if not os.path.exists(path) or os.path.getsize(path) < 204_800:
+    if not os.path.exists(path) or os.path.getsize(path) < _MIN_CLIP_BYTES:
         return None
 
     if not FFPROBE_EXE:
@@ -377,8 +458,7 @@ def _probe_clip_info(path: str) -> dict | None:
     try:
         result = subprocess.run(
             [FFPROBE_EXE, "-v", "error", "-select_streams", "v:0",
-             "-count_frames", "-show_entries",
-             "stream=nb_read_frames,duration,pix_fmt",
+             "-show_entries", "stream=nb_frames,duration,pix_fmt",
              "-of", "json", path],
             capture_output=True, text=True,
             encoding="utf-8", errors="replace", timeout=15
@@ -389,9 +469,13 @@ def _probe_clip_info(path: str) -> dict | None:
         import json
         data = json.loads(result.stdout)
         stream = data.get("streams", [{}])[0]
-        nb_frames = int(stream.get("nb_read_frames", "0"))
-        duration = float(stream.get("duration", "0"))
-        if nb_frames <= 0 or duration <= 0.1:
+        duration = float(stream.get("duration") or 0)
+        if duration <= 0.1:
+            return None
+        nb_frames = int(stream.get("nb_frames") or 0)
+        if nb_frames <= 0:
+            nb_frames = _count_clip_frames(path)
+        if nb_frames <= 0:
             return None
 
         return {
@@ -427,37 +511,39 @@ def merge_clips(clip_paths: list, output_path: str, preset: str = "veryfast") ->
         RuntimeError: 所有片段均加载失败或拼接失败时抛出
     """
     if FFPROBE_EXE:
-        print(f"  🔍 片段探测: {FFPROBE_EXE}")
+        print(f"  [INFO] 片段探测: {FFPROBE_EXE}")
     else:
-        print("  ⚠️ 未找到 ffprobe，改用 ffmpeg 解析片段信息（CI 上建议安装 ffmpeg 以启用流拷贝拼接）")
+        print("  [WARN] 未找到 ffprobe，改用 ffmpeg 解析片段信息（CI 上建议安装 ffmpeg 以启用流拷贝拼接）")
 
     # 预检所有片段，过滤损坏的
     valid_clips = []
     skipped = []
+    total_duration = 0.0
     for path in clip_paths:
         info = _probe_clip_info(path)
         if info:
             valid_clips.append(path)
+            total_duration += float(info.get("duration") or 0)
         else:
             skipped.append(path)
-            print(f"  ⚠️ 片段损坏或无效，跳过: {os.path.basename(path)}")
+            print(f"  [WARN] 片段损坏或无效，跳过: {os.path.basename(path)}")
 
     if not valid_clips:
         raise RuntimeError("所有视频片段均无效或损坏，无法拼接")
 
     if skipped:
-        print(f"  ⚠️ 跳过 {len(skipped)} 个损坏片段，拼接 {len(valid_clips)} 个有效片段")
+        print(f"  [WARN] 跳过 {len(skipped)} 个损坏片段，拼接 {len(valid_clips)} 个有效片段")
 
     # 先尝试视频流拷贝拼接（视频零重编码 + 音频重编码，速度极快）
     try:
-        print(f"  ⚡ 尝试视频流拷贝拼接（视频零重编码 + 音频重编码）...")
+        print(f"  [TRY] 尝试视频流拷贝拼接（视频零重编码 + 音频重编码）...")
         merge_clips_stream_copy(valid_clips, output_path)
         file_size = os.path.getsize(output_path) / (1024 * 1024)
-        print(f"  ✅ 流拷贝拼接完成（{file_size:.1f} MB，视频未重编码）")
+        print(f"  [OK] 流拷贝拼接完成（{file_size:.1f} MB，视频未重编码）")
         return output_path
     except Exception as e:
-        print(f"  ⚠️ 流拷贝拼接失败，回退到 ffmpeg 重编码拼接: {e}")
-        print(f"  🔄 使用 ffmpeg concat demuxer 重编码（preset={preset}）...")
+        print(f"  [WARN] 流拷贝拼接失败，回退到 ffmpeg 重编码拼接: {e}")
+        print(f"  [FALLBACK] 使用 ffmpeg concat demuxer 重编码（preset={preset}）...")
 
     # ffmpeg concat demuxer 重编码：流式处理，不一次性加载所有片段到内存
     concat_list = []
@@ -465,6 +551,16 @@ def merge_clips(clip_paths: list, output_path: str, preset: str = "veryfast") ->
         abs_path = os.path.abspath(path)
         safe_path = abs_path.replace("'", "'\\''")
         concat_list.append(f"file '{safe_path}'")
+
+    # 超时按总时长自适应：4 线程 veryfast 大约 3~5x 实时速度。
+    # 之前硬编码 600s，在 300+ 片段 / 三十分钟以上的长视频上必然误超时
+    # （Run 45324299443：330 个片段、全量重编码 10 分钟没跑完直接失败）。
+    total_minutes = total_duration / 60
+    encode_timeout = min(2400, max(900, int(total_duration * 1.5) + 120))
+    print(
+        f"  [TIME] 输入总时长约 {total_minutes:.1f} 分钟，"
+        f"重编码超时上限 {encode_timeout // 60} 分钟"
+    )
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as f:
         f.write("\n".join(concat_list))
@@ -480,7 +576,7 @@ def merge_clips(clip_paths: list, output_path: str, preset: str = "veryfast") ->
             "-c:v", "libx264",
             "-preset", preset,
             "-c:a", "aac",
-            "-threads", "4",
+            "-threads", "0",
             "-shortest",
             "-movflags", "+faststart",
             output_path,
@@ -490,7 +586,7 @@ def merge_clips(clip_paths: list, output_path: str, preset: str = "veryfast") ->
             capture_output=True,
             text=True,
             encoding="utf-8", errors="replace",
-            timeout=600  # 10 分钟超时（重编码 175 个片段可能需要较长时间）
+            timeout=encode_timeout
         )
         if result.returncode != 0 or not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
             raise RuntimeError(f"ffmpeg 重编码拼接失败: {result.stderr.strip()}")
@@ -502,7 +598,7 @@ def merge_clips(clip_paths: list, output_path: str, preset: str = "veryfast") ->
         if not validated:
             raise RuntimeError("ffmpeg 重编码拼接产出损坏文件（末尾帧不可访问）")
     except subprocess.TimeoutExpired:
-        raise RuntimeError("ffmpeg 重编码拼接超时（10分钟）")
+        raise RuntimeError(f"ffmpeg 重编码拼接超时（{encode_timeout // 60}分钟）")
     except Exception as e:
         raise RuntimeError(f"ffmpeg 重编码拼接异常: {e}")
     finally:
@@ -510,7 +606,7 @@ def merge_clips(clip_paths: list, output_path: str, preset: str = "veryfast") ->
             os.unlink(list_file)
 
     file_size = os.path.getsize(output_path) / (1024 * 1024)
-    print(f"  ✅ ffmpeg 重编码拼接完成（{file_size:.1f} MB，{len(valid_clips)} 个片段）")
+    print(f"  [OK] ffmpeg 重编码拼接完成（{file_size:.1f} MB，{len(valid_clips)} 个片段）")
     return output_path
 
 
